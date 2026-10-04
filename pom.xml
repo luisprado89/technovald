@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.technovald</groupId>
+    <artifactId>TechNovaLD</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>TechNovaLD</name>
+    <description>TechNovaLD Backend E-commerce TechNovaLD</description>
+
+    <properties>
+        <java.version>17</java.version>
+        <springdoc.version>3.1.0</springdoc.version>
+    </properties>
+
+    <dependencies>
+        <!-- ============================================== -->
+        <!-- PERSISTENCIA                                   -->
+        <!-- ============================================== -->
+
+        <!-- Spring Data JPA para MySQL -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Spring Data MongoDB para nuestra base de datos de catálogo -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <!-- Driver de MySQL -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+
+        <!-- ============================================== -->
+        <!-- SEGURIDAD Y VALIDACIÓN                         -->
+        <!-- ============================================== -->
+
+        <!-- Spring Security para autenticación y roles (Admin, Trabajador, Cliente) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Spring Validation para validar DTOs -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Dependencias para JWT (Versión 0.12.6 unificada) -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- WEB, EMAIL, ACTUATOR                           -->
+        <!-- ============================================== -->
+
+        <!-- Spring Web (incluye Tomcat y Jakarta Servlet API) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Mail (para el EmailService) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- Actuator: endpoints de salud y métricas.
+             Protegido explícitamente en SecurityConfig. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+
+        <!-- ============================================== -->
+        <!-- DOCUMENTACIÓN OPENAPI / SWAGGER                -->
+        <!-- ============================================== -->
+
+        <!-- springdoc-openapi 3.x es la rama compatible con Spring Boot 4.x.
+             Ver: https://springdoc.org/ -->
+
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+
+        <!-- ============================================== -->
+        <!-- UTILIDADES                                     -->
+        <!-- ============================================== -->
+
+        <!-- Lombok para reducir código boilerplate -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- FLYWAY (MIGRACIONES DE BASE DE DATOS)         -->
+        <!-- ============================================== -->
+
+        <!-- Spring Boot 4.x ya no auto-configura Flyway con solo flyway-core.
+             Necesita el starter oficial de Spring Boot. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+
+        <!-- Soporte específico para MySQL (obligatorio desde Flyway 10). -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- TESTING                                        -->
+        <!-- ============================================== -->
+
+        <!-- Spring Boot Test para pruebas -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <!-- Nombre fijo del jar generado (target/app.jar).
+            Evita que el Dockerfile dependa de la versión del proyecto
+            (0.0.1-SNAPSHOT, 0.0.2-SNAPSHOT, ...): con <finalName> el jar
+            siempre se llama app.jar y el COPY del Dockerfile no cambia
+            al subir la versión. -->
+        <finalName>app</finalName>
+        <plugins>
+
+            <!-- Plugin de Spring Boot para empaquetar el fat jar ejecutable.
+                 Excluye Lombok del jar final (buena práctica estándar de Spring Initializr). -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Plugin de compilación con Lombok como annotation processor.
+                 No declaramos source/target porque spring-boot-starter-parent
+                 ya los configura vía <java.version>17</java.version>. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
