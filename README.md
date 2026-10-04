@@ -44,10 +44,18 @@ TechNovaLD/
 ### Compilar y empaquetar
 
 ```powershell
-.\mvnw.cmd clean package
+.\mvnw.cmd clean compile
+.\mvnw.cmd clean package -DskipTests
 ```
 
-Debe terminar en `BUILD SUCCESS` y generar `target/app.jar`.
+Ambos deben terminar en `BUILD SUCCESS`; el segundo genera `target/app.jar`.
+
+`.\mvnw.cmd clean compile` compila las clases. `.\mvnw.cmd clean package -DskipTests`
+empaqueta sin ejecutar los tests, que en esta fase **todavía no pueden pasar**:
+el test de contexto (`TechNovaLdApplicationTests`) intenta arrancar la aplicación
+y la aplicación no arranca todavía (sin configuración de datasource). En cuanto
+exista esa configuración, los tests se ejecutarán con `.\mvnw.cmd clean package`
+sin necesidad del flag.
 
 ### Arrancar
 
@@ -77,6 +85,8 @@ el proyecto **compila y se empaqueta**, pero no arranca.
 
 | | |
 | --- | --- |
-| Compilación y empaquetado | ✅ `.\mvnw.cmd clean package` |
+| Compilación | ✅ `.\mvnw.cmd clean compile` |
+| Empaquetado (sin tests) | ✅ `.\mvnw.cmd clean package -DskipTests` |
 | Arranque | ❌ pendiente de configurar la base de datos |
+| Tests | ⏸️ pendientes hasta que la aplicación pueda arrancar |
 | Endpoints disponibles | ninguno todavía |
