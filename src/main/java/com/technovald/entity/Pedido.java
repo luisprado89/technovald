@@ -57,10 +57,13 @@ import java.util.List;
  * <p><b>Índices definidos:</b></p>
  * <ul>
  *   <li>{@code @Index(name = "idx_pedido_activo", columnList = "activo")}:
- *       optimiza búsquedas frecuentes por estado (pedidos activos/inactivos).</li>
+ *       optimiza búsquedas frecuentes por soft delete (pedidos activos/inactivos).</li>
  *   <li>{@code @Index(name = "idx_pedido_cliente_activo", columnList = "cliente_id, activo")}:
  *       índice compuesto que optimiza búsquedas de pedidos filtrados por cliente
  *       y estado simultáneamente.</li>
+ *   <li>{@code @Index(name = "idx_pedido_estado_activo", columnList = "estado, activo")}:
+ *       optimiza listados de pedidos filtrados por estado
+ *       ({@code PENDIENTE}, {@code PROCESANDO}, {@code ENVIADO}, {@code ENTREGADO}).</li>
  * </ul>
  *
  * <p><b>Nota:</b> Los índices aceleran las lecturas ({@code SELECT}) a cambio de
@@ -73,7 +76,8 @@ import java.util.List;
 @Entity
 @Table(name = "pedido", indexes = {
         @Index(name = "idx_pedido_activo", columnList = "activo"),
-        @Index(name = "idx_pedido_cliente_activo", columnList = "cliente_id, activo")
+        @Index(name = "idx_pedido_cliente_activo", columnList = "cliente_id, activo"),
+        @Index(name = "idx_pedido_estado_activo", columnList = "estado, activo")
 })
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
