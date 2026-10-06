@@ -101,6 +101,12 @@ public class Persona {
     private String telefono;
 
     /**
+     * Dirección postal de la persona.
+     */
+    @Column(name = "direccion", nullable = false)
+    private String direccion;
+
+    /**
      * <p>
      * El FK {@code persona_id} vive en la tabla {@code usuario},
      * por lo que esta relación es {@code mappedBy} (lado inverso).
