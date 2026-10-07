@@ -1,10 +1,16 @@
 package com.technovald.config;
 
+
+import com.technovald.security.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -12,6 +18,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 
 /**
  * Configuración de seguridad de la API.
@@ -24,6 +33,13 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
 
     /**
      * Cadena de filtros de seguridad.
@@ -44,26 +60,30 @@ public class SecurityConfig {
                  */
                 .csrf(csrf -> csrf.disable())
 
-                /*
-                 * Autenticación HTTP Basic: el usuario y la contraseña viajan
-                 * en la cabecera Authorization de cada petición y se comprueban
-                 * contra la tabla usuario.
-                 */
-                .httpBasic(Customizer.withDefaults())
-
-                /*
-                 * Sin sesión: cada petición se autentica por sí misma, así que
-                 * no se crea ni se guarda ningún HttpSession.
-                 */
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                /*
-                 * Todas las rutas exigen autenticación: todavía no hay ningún
-                 * endpoint público.
-                 */
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        // El login es la única ruta pública: es la que reparte los tokens.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .anyRequest().authenticated()
+                )
 
-                .authenticationProvider(authenticationProvider);
+                /*
+                 * Sin credenciales válidas la respuesta es 401. Sin un punto de
+                 * entrada propio, Spring Security devolvería 403, que describe
+                 * un problema de permisos y no de identidad.
+                 */
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+
+                .authenticationProvider(authenticationProvider)
+
+                /*
+                 * El filtro del token va antes del filtro de usuario y
+                 * contraseña: cuando la petición llegue ahí, o ya está
+                 * autenticada por token, o no hay nada que autenticar.
+                 */
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -91,8 +111,20 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider(UserDetailsService userDetailsService,
                                                          PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder);
-        return provider;
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder);
+        return authProvider;
+    }
+
+    /**
+     * Expone el gestor de autenticación que usa el inicio de sesión.
+     *
+     * @param configuration configuración de autenticación de Spring Security.
+     * @return el gestor de autenticación.
+     * @throws Exception si no se puede construir.
+     */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
     }
 }
