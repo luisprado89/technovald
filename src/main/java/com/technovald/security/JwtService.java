@@ -190,4 +190,16 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
     }
+
+    /**
+     * Vida del token en segundos.
+     *
+     * <p>Se usa para que el login pueda devolver al cliente la fecha de
+     * caducidad del token recién emitido, sin necesidad de decodificarlo.</p>
+     *
+     * @return la vida configurada del token, en segundos.
+     */
+    public long getExpirationSeconds() {
+        return expiration / 1000;
+    }
 }

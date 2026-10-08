@@ -14,6 +14,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 /** Implementación de {@link AuthService}. */
 @Service
 @RequiredArgsConstructor
@@ -49,9 +51,11 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "Usuario no encontrado o inactivo: " + request.getUsername()));
 
-        return new AuthResponse(
-                jwtService.generateToken(userDetails),
-                usuario.getUsername(),
-                usuario.getRol().name());
+        return AuthResponse.builder()
+                .token(jwtService.generateToken(userDetails))
+                .username(usuario.getUsername())
+                .rol(usuario.getRol().name())
+                .expiracion(LocalDateTime.now().plusSeconds(jwtService.getExpirationSeconds()))
+                .build();
     }
 }
