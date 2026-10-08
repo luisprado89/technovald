@@ -25,10 +25,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Configuración de seguridad de la API.
  *
- * <p>En esta fase la autenticación es HTTP Basic contra la tabla
- * {@code usuario}. Cuando llegue el login con token, la cadena de filtros
- * cambiará Basic por un filtro que lea el JWT; las reglas por rol se irán
- * añadiendo a medida que existan endpoints que las necesiten.</p>
+ * <p>Autenticación por JWT: el login reparte el token y el
+ * {@link JwtAuthenticationFilter} autentica cada petición que lo traiga en la
+ * cabecera {@code Authorization}. Sin credenciales válidas la respuesta es
+ * 401. Las reglas por rol se irán añadiendo a medida que existan endpoints
+ * que las necesiten.</p>
  */
 @Configuration
 @EnableWebSecurity
@@ -36,6 +37,11 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**
+     * Construye la configuración con el filtro de autenticación por token.
+     *
+     * @param jwtAuthenticationFilter filtro que valida el token en cada petición.
+     */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
@@ -65,6 +71,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // El login es la única ruta pública: es la que reparte los tokens.
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        /*
+                         * /error es el punto de entrada interno de Spring Boot para
+                         * cualquier error (404, 500...). Es un forward que hace el propio
+                         * framework, así que no tiene sentido exigir autenticación ahí:
+                         * si fuera protegida, un 404 legítimo se convertiría en un 401
+                         * engañoso.
+                         */
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
 
