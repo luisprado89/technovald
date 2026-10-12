@@ -70,17 +70,25 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // El login es la única ruta pública: es la que reparte los tokens.
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                        /*
-                         * /error es el punto de entrada interno de Spring Boot para
-                         * cualquier error (404, 500...). Es un forward que hace el propio
-                         * framework, así que no tiene sentido exigir autenticación ahí:
-                         * si fuera protegida, un 404 legítimo se convertiría en un 401
-                         * engañoso.
+                                                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                                               /*
+                         * Rutas públicas: el login, que reparte los tokens, y el
+                         * registro de clientes, que da de alta a alguien que
+                         * todavía no tiene credenciales con las que autenticarse.
                          */
-                        .requestMatchers("/error").permitAll()
-                        .anyRequest().authenticated()
-                )
+                                                .requestMatchers(HttpMethod.POST,
+                                                        "/api/auth/login",
+                                                        "/api/clientes/register").permitAll()
+                /*
+                 * /error es el punto de entrada interno de Spring Boot para
+                 * cualquier error (404, 500...). Es un forward que hace el propio
+                 * framework, así que no tiene sentido exigir autenticación ahí:
+                 * si fuera protegida, un 404 legítimo se convertiría en un 401
+                 * engañoso.
+                 */
+                .requestMatchers("/error").permitAll()
+                .anyRequest().authenticated()
+                 )
 
                 /*
                  * Sin credenciales válidas la respuesta es 401. Sin un punto de

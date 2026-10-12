@@ -27,18 +27,26 @@ TechNovaLD/
 │   │   │   ├── config/
 │   │   │   │   └── SecurityConfig.java       # cadena de seguridad JWT
 │   │   │   ├── controller/
-│   │   │   │   └── AuthController.java       # POST /api/auth/login
+│   │   │   │   ├── AuthController.java       # POST /api/auth/login
+│   │   │   │   └── ClienteController.java    # POST /api/clientes/register
 │   │   │   ├── dto/
-│   │   │   │   ├── request/LoginRequest.java
-│   │   │   │   └── response/AuthResponse.java
+│   │   │   │   ├── request/
+│   │   │   │   │   ├── ClienteRegistroRequest.java
+│   │   │   │   │   └── LoginRequest.java
+│   │   │   │   └── response/
+│   │   │   │       ├── AuthResponse.java
+│   │   │   │       └── ClienteRegistroResponse.java
 │   │   │   ├── entity/                       # 10 entidades JPA (MySQL)
 │   │   │   ├── enums/                        # RolUsuario, EstadoPedido, EstadoSolicitud
 │   │   │   ├── exception/
 │   │   │   │   ├── BusinessRuleException.java
 │   │   │   │   ├── GlobalExceptionHandler.java
 │   │   │   │   └── ResourceNotFoundException.java
+│   │   │   ├── mapper/
+│   │   │   │   └── PersonaMapper.java
 │   │   │   ├── repository/mysql/             # repositorios JPA
 │   │   │   ├── security/
+│   │   │   │   ├── CredentialGenerator.java
 │   │   │   │   ├── CustomUserDetailsService.java
 │   │   │   │   ├── JwtAuthenticationFilter.java
 │   │   │   │   └── JwtService.java
@@ -46,7 +54,10 @@ TechNovaLD/
 │   │   │   │   └── AdminBootstrapInitializer.java
 │   │   │   └── service/
 │   │   │       ├── AuthService.java
-│   │   │       └── impl/AuthServiceImpl.java
+│   │   │       ├── ClienteService.java
+│   │   │       └── impl/
+│   │   │           ├── AuthServiceImpl.java
+│   │   │           └── ClienteServiceImpl.java
 │   │   └── resources/
 │   │       ├── application.properties        # configuración de la aplicación
 │   │       └── db/migration/
@@ -239,8 +250,8 @@ creado el administrador se pueden borrar del `.env`.
 
 ### Inicio de sesión
 
-`POST /api/auth/login` es la única ruta pública: es la que reparte los tokens.
-Recibe el usuario y la contraseña y, si son correctos, devuelve:
+`POST /api/auth/login` es una de las rutas públicas: reparte los tokens. Recibe
+el usuario y la contraseña y, si son correctos, devuelve:
 
 ```json
 {
@@ -269,6 +280,76 @@ En cada petición, el filtro comprueba la firma, vuelve a cargar el usuario de l
 base de datos y deja la petición autenticada. Si el token falta, está
 manipulado, ha caducado, o su usuario ya no existe o está dado de baja, la
 respuesta es **401**.
+
+## 🧾 Registro de clientes
+
+`POST /api/clientes/register` es la segunda ruta pública de la API: da de alta
+a un cliente que todavía no tiene credenciales. No recibe usuario ni
+contraseña; recibe los datos personales y el sistema genera las credenciales.
+
+### Qué se crea
+
+En una sola transacción se persisten tres filas:
+
+| Tabla | Qué se guarda |
+| --- | --- |
+| `persona` | nombre, apellido, DNI, email, teléfono y dirección |
+| `usuario` | username generado, hash BCrypt de la contraseña generada y rol `CLIENTE` |
+| `cliente` | el perfil de compra, enlazado con su persona |
+
+Si algo falla a mitad, no queda ninguna de las tres: o se crea el cliente
+completo, o no se crea nada.
+
+### Cómo se generan las credenciales
+
+- **Username**: `nombre.apellido`, en minúsculas, sin acentos y solo con
+  `[a-z0-9]` (José García → `jose.garcia`). Si ese username ya está ocupado se
+  prueba `jose.garcia1`, `jose.garcia2`… hasta 100.000 candidatos.
+- **Contraseña**: 16 caracteres aleatorios (criptográficamente seguros) con al
+  menos una mayúscula, una minúscula, un dígito y un símbolo **garantizados por
+  construcción**, no por probabilidad. Se excluyen los caracteres ambiguos
+  (`I`, `O`, `l`, `0`, `1`) y los que rompen JSON, HTML, shell o `.env`
+  (comillas, barras, `< > &`, `$`).
+- **Hash**: en la tabla `usuario` solo se guarda el hash BCrypt. La contraseña
+  en claro se devuelve **una sola vez**, en la respuesta del alta, y no se
+  escribe en ningún log.
+
+La política (longitud 16, 100.000 intentos de username) vive en las constantes de
+`CredentialGenerator`: son valores fijos del sistema, no configurables, porque
+ningún entorno necesita hoy otros distintos.
+
+### Respuesta — `201 Created`
+
+```json
+{
+  "id": 2,
+  "nombre": "Lucia",
+  "apellido": "Garcia Perez",
+  "username": "lucia.garcia",
+  "passwordInicial": "7N8u*yT-nY**%mCv",
+  "rol": "CLIENTE",
+  "token": "eyJhbGciOiJIUzM4NCJ9..."
+}
+```
+
+El `token` es un JWT con la misma forma que el del login, así que el cliente
+queda autenticado nada más registrarse, sin pasar por
+`POST /api/auth/login` (aunque puede hacerlo: las credenciales funcionan).
+
+La respuesta **no** lleva cabecera `Location`: todavía no hay un endpoint que
+consulte un cliente por su id, y apuntar a una ruta que responde 404 sería peor
+que no apuntar a ninguna.
+
+### Reglas de negocio
+
+| Caso | Respuesta |
+| --- | --- |
+| DNI ya registrado | **400** `Ya existe una persona registrada con el DNI indicado` |
+| Email ya registrado | **400** `Ya existe una persona registrada con el email indicado` |
+| DNI con formato inválido, campos vacíos o email ilegible | **400** con `campo: motivo` por cada campo |
+| Cuerpo ausente o JSON roto | **400** `El cuerpo de la petición no es un JSON válido o está vacío` |
+
+Todos los errores llegan con el formato uniforme de la sección siguiente.
 
 ## ⚠️ Formato de error uniforme
 
@@ -316,11 +397,6 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 - El token se manda **siempre en la cabecera `Authorization` manual**, no en la
   pestaña de Authorization de Postman.
 - `<TOKEN>` = el `token` que devuelve la prueba 1.
-- `<TOKEN_MANIPULADO>` = ese mismo token con **un carácter cambiado en la mitad**
-  (no al final: los bits de padding del Base64 pueden hacer que la firma siga
-  siendo válida si solo se añaden caracteres al final).
-
----
 
 ### 1. Login correcto → 200 + token
 
@@ -345,46 +421,22 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiJhZG1pbi50ZWNobm92YWxkIiwicm9sIjoiQURNSU4iLCJ2ZXIiOjAsImlhdCI6MTc5MTQ5MTM0MywiZXhwIjoxNzkxNTc3NzQzfQ.sheE-ENiif9XUN2BAjXp7ibSr7d2ztnoMUBEKJr_Zopkv1gxx6RdTMn9Bg5Us5L5",
+  "token": "eyJhbGciOiJIUzM4NCJ9...",
   "username": "admin.technovald",
   "rol": "ADMIN",
   "expiracion": "2026-10-09T22:29:03"
 }
 ```
 
----
-
 ### 2. Sin token → 401 (vacío)
 
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` |
-| URL | `http://localhost:8080/` |
-| Authorization | `No Auth` |
-| Headers | *ninguno* |
-| Body | *ninguno* |
+**Request**: `GET http://localhost:8080/`, sin Authorization.
 
 **Response** — `401 Unauthorized`, sin body.
 
-> Este 401 lo devuelve la **cadena de filtros** de Spring Security antes de que
-> la petición llegue al `DispatcherServlet`, así que no pasa por el
-> `GlobalExceptionHandler`. Se devuelve sin cuerpo.
-
----
-
 ### 3. Con token válido → 404 (formato uniforme)
 
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` |
-| URL | `http://localhost:8080/` |
-| Authorization | `No Auth` |
-| Headers | `Authorization: Bearer <TOKEN>` |
-| Body | *ninguno* |
+**Request**: `GET http://localhost:8080/` con `Authorization: Bearer <TOKEN>`.
 
 **Response** — `404 Not Found`
 
@@ -398,157 +450,97 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 }
 ```
 
-> El **404** es el resultado correcto: la petición ha pasado la autenticación y
-> ha llegado al dispatcher, que todavía no tiene ninguna ruta para `/`.
-
----
-
-### 4. Con token manipulado → 401 (vacío)
-
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` |
-| URL | `http://localhost:8080/` |
-| Authorization | `No Auth` |
-| Headers | `Authorization: Bearer <TOKEN_MANIPULADO>` |
-| Body | *ninguno* |
-
-**Response** — `401 Unauthorized`, sin body.
-
-> Igual que la prueba 2: el 401 lo devuelve la cadena de filtros antes del
-> dispatcher.
-
----
-
-### 5. Credenciales incorrectas → 401 (formato uniforme)
+### 4. Registro correcto → 201
 
 **Request**
 
 | Campo | Valor |
 | --- | --- |
 | Método | `POST` |
-| URL | `http://localhost:8080/api/auth/login` |
+| URL | `http://localhost:8080/api/clientes/register` |
 | Authorization | `No Auth` |
 | Headers | `Content-Type: application/json` |
-| Body | raw / JSON |
 
 ```json
 {
-  "username": "admin.technovald",
-  "password": "mal"
+  "nombre": "Lucia",
+  "apellido": "Garcia Perez",
+  "dni": "12345678Z",
+  "email": "lucia.garcia@technovald.test",
+  "telefono": "600111222",
+  "direccion": "Calle Prueba 1"
 }
 ```
 
-**Response** — `401 Unauthorized`
+**Response** — `201 Created`
 
 ```json
 {
-  "timestamp": "2026-10-11T12:28:02.623386",
-  "status": 401,
-  "error": "Unauthorized",
-  "message": "Credenciales inválidas",
-  "path": "/api/auth/login"
+  "id": 1,
+  "nombre": "Lucia",
+  "apellido": "Garcia Perez",
+  "username": "lucia.garcia",
+  "passwordInicial": "7N8u*yT-nY**%mCv",
+  "rol": "CLIENTE",
+  "token": "eyJhbGciOiJIUzM4NCJ9..."
 }
 ```
 
-> El mensaje es genérico a propósito: no distingue si falla el usuario o la
-> contraseña, porque dar pistas distintas permitiría averiguar qué usuarios
-> existen.
+### 5. DNI repetido → 400
 
----
-
-### 6. Campos vacíos → 400 (formato uniforme)
-
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `POST` |
-| URL | `http://localhost:8080/api/auth/login` |
-| Authorization | `No Auth` |
-| Headers | `Content-Type: application/json` |
-| Body | raw / JSON |
-
-```json
-{
-  "username": "",
-  "password": ""
-}
-```
+**Request**: mismo DNI, otro email.
 
 **Response** — `400 Bad Request`
 
 ```json
 {
-  "timestamp": "2026-10-11T12:28:42.297135",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "password: La contraseña es obligatoria, username: El username es obligatorio",
-  "path": "/api/auth/login"
+  "message": "Ya existe una persona registrada con el DNI indicado"
 }
 ```
 
-> El campo `message` une los errores de todos los campos con el formato
-> `campo: motivo`.
+### 6. Email repetido → 400
 
----
+**Request**: otro DNI, mismo email.
 
-### 7. Ruta inexistente → 404 (formato uniforme)
-
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` |
-| URL | `http://localhost:8080/ruta-que-no-existe` |
-| Authorization | `No Auth` |
-| Headers | `Authorization: Bearer <TOKEN>` |
-| Body | *ninguno* |
-
-**Response** — `404 Not Found`
+**Response** — `400 Bad Request`
 
 ```json
 {
-  "timestamp": "2026-10-11T12:30:52.856150",
-  "status": 404,
-  "error": "Not Found",
-  "message": "El endpoint solicitado no existe: /ruta-que-no-existe",
-  "path": "/ruta-que-no-existe"
+  "message": "Ya existe una persona registrada con el email indicado"
 }
 ```
 
----
+### 7. Username con sufijo → 201
 
-### 8. Método HTTP incorrecto → 405 (formato uniforme)
+**Request**: mismos nombre y apellido, otros DNI y email.
+
+**Response** — `201 Created` con `"username": "lucia.garcia1"`.
+
+### 8. Login con las credenciales generadas → 200
+
+**Request**: `POST /api/auth/login` con el `username` y la `passwordInicial` de la prueba 4.
+
+**Response** — `200 OK` con `"rol": "CLIENTE"`.
+
+### 9. Datos inválidos → 400
 
 **Request**
 
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` (incorrecto: el endpoint es POST) |
-| URL | `http://localhost:8080/api/auth/login` |
-| Authorization | `No Auth` |
-| Headers | `Authorization: Bearer <TOKEN>` |
-| Body | *ninguno* |
-
-**Response** — `405 Method Not Allowed`
-
 ```json
 {
-  "timestamp": "2026-10-11T12:31:29.823866",
-  "status": 405,
-  "error": "Method Not Allowed",
-  "message": "Request method 'GET' is not supported",
-  "path": "/api/auth/login"
+  "nombre": "",
+  "apellido": "Perez",
+  "dni": "123",
+  "email": "no-es-un-email",
+  "telefono": "",
+  "direccion": ""
 }
 ```
 
-> El handler respeta el **status 405** que ya traía la excepción de Spring MVC
-> y, al mismo tiempo, le aplica el formato de error uniforme.
-
----
+**Response** — `400 Bad Request` con `message` que une los errores de todos los
+campos: `"dni: El DNI debe tener 8 números seguidos de una letra mayúscula,
+email: El email debe tener un formato válido, nombre: El nombre es obligatorio,
+direccion: La dirección es obligatoria, telefono: El teléfono es obligatorio"`.
 
 ### Resumen de resultados
 
@@ -557,11 +549,12 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 | 1 | Login correcto | **200** + token | — |
 | 2 | Sin token | **401** | ❌ (viene de los filtros) |
 | 3 | Con token válido | **404** | ✅ |
-| 4 | Con token manipulado | **401** | ❌ (viene de los filtros) |
-| 5 | Credenciales incorrectas | **401** | ✅ |
-| 6 | Campos vacíos | **400** | ✅ |
-| 7 | Ruta inexistente | **404** | ✅ |
-| 8 | Método HTTP incorrecto | **405** | ✅ |
+| 4 | Registro correcto | **201** + credenciales | — |
+| 5 | DNI repetido | **400** | ✅ |
+| 6 | Email repetido | **400** | ✅ |
+| 7 | Username con sufijo | **201** | — |
+| 8 | Login con las credenciales generadas | **200** + token | — |
+| 9 | Datos inválidos | **400** | ✅ |
 
 ## 📊 Estado del proyecto
 
@@ -573,15 +566,29 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 | Modelo JPA | ✅ 10 entidades y 3 enums, validados contra el esquema al arrancar |
 | Autenticación | ✅ login con JWT; el resto de rutas exige `Authorization: Bearer` |
 | Manejo de errores | ✅ formato uniforme en todos los errores que pasan por el dispatcher |
-| Endpoints accesibles | `POST /api/auth/login` (público); ninguno más todavía |
+| Registro de clientes | ✅ alta pública transaccional con credenciales generadas y token |
+| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); ninguno más todavía |
 
 ## ⚠️ Deudas conocidas
 
+- **Dos altas simultáneas con el mismo DNI o email** pueden pasar las dos la
+  comprobación previa y dejar que sea MySQL quien rechace el segundo `INSERT`
+  por la restricción `UNIQUE`: esa petición recibe un `500` en lugar del `400`
+  de negocio. La ventana es mínima y el dato **nunca** queda duplicado, porque
+  la garantía real es la restricción de la base de datos.
+- **La contraseña inicial viaja en claro** en la respuesta del alta: es la
+  única forma de que el cliente la conozca. En la base de datos solo queda su
+  hash BCrypt.
+- **La política de credenciales es fija** (longitud 16, 100.00000 intentos de
+  username) en las constantes de `CredentialGenerator`. Cuando existan perfiles
+  `dev`/`prod`, se externalizará a `application.properties`.
+- **La validación del DNI solo comprueba el formato** (8 dígitos + letra
+  mayúscula), no que la letra corresponda con los dígitos según el algoritmo
+  oficial.
 - **Añadir un carácter Base64 válido al final de un token no invalida la
   firma** (los bits de padding del Base64 se ignoran). No es explotable: el
   token sigue siendo del mismo usuario, con la misma caducidad y la misma
   versión de credenciales. Se documenta como comportamiento conocido de JJWT.
 - **Los 401 de la cadena de filtros no llevan cuerpo** (ni formato uniforme):
   Spring Security resuelve la petición antes del dispatcher, así que el
-  `GlobalExceptionHandler` no puede darles cuerpo. Se documenta en la sección
-  de formato de error uniforme.
+  `GlobalExceptionHandler` no puede darles cuerpo.

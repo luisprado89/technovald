@@ -30,4 +30,18 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
      * </p>
      */
     Optional<Usuario> findByUsernameAndActivoTrue(String username);
+
+     /**
+     *  Comprueba si ya existe un usuario con el username indicado.
+     * 
+     *  <p>
+     *  Lo usa el generador de credenciales para encontrar un username libre
+     *  ({@code jose.garcia}, {@code jose.garcia1}…) durante el registro. La
+     *  garantía real de unicidad es la clave {@code uk_usuario_username}.
+     *  </p>
+     * 
+     *  @param username candidato a username.
+     *  @return {@code true} si el username ya está ocupado.
+     */
+     boolean existsByUsername(String username);
 }

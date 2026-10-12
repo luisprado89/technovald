@@ -17,4 +17,25 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface PersonaRepository extends JpaRepository<Persona, Long> {
 
+/**
+* Comprueba si ya existe una persona con el DNI indicado.
+*
+* <p>
+* Se usa en el registro para rechazar el alta con un 400 de negocio antes
+* de intentar el INSERT. La garantía real de unicidad es la clave
+* {@code uk_persona_dni} de la tabla.
+* </p>
+*
+* @param dni DNI ya normalizado (sin espacios y en mayúsculas).
+* @return {@code true} si el DNI ya está registrado.
+*/
+   boolean existsByDni(String dni);
+
+/**
+* Comprueba si ya existe una persona con el email indicado.
+*
+* @param email email ya normalizado (sin espacios y en minúsculas).
+* @return {@code true} si el email ya está registrado.
+*/
+    boolean existsByEmail(String email);
 }
