@@ -1,7 +1,9 @@
 package com.technovald.service;
 
 import com.technovald.dto.request.ClienteRegistroRequest;
+import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteRegistroResponse;
+import com.technovald.dto.response.ClienteResponse;
 
 /**
  * Operaciones de gestión de clientes.
@@ -23,8 +25,33 @@ public interface ClienteService {
      * cliente, y devuelve las credenciales generadas junto con un token JWT.
      * </p>
      *
-     * @param request datos personales del cliente.
+     * @param clienteRegistroRequest datos personales del cliente.
      * @return las credenciales iniciales, el rol y el token del cliente creado.
      */
-    ClienteRegistroResponse registerCliente(ClienteRegistroRequest request);
+    ClienteRegistroResponse registerCliente(ClienteRegistroRequest clienteRegistroRequest);
+
+     /**
+     * Devuelve el perfil del cliente autenticado.
+     *
+     * @param username username del usuario autenticado, leído del token.
+     * @return los datos del perfil de cliente.
+     * @throws com.technovald.exception.ResourceNotFoundException si el usuario
+     *         ya no existe o está inactivo, o si no tiene perfil de cliente
+     *         activo.
+     */
+     ClienteResponse getMyCliente(String username);
+
+     /**
+     * Actualiza los datos de contacto del cliente autenticado.
+     *
+     * @param username username del usuario autenticado, leído del token.
+     * @param clienteUpdateRequest  nuevos datos de contacto.
+     * @return los datos del perfil ya actualizados.
+     * @throws com.technovald.exception.ResourceNotFoundException si el usuario
+     *         ya no existe o está inactivo, o si no tiene perfil de cliente
+     *         activo.
+     * @throws com.technovald.exception.BusinessRuleException si el email nuevo
+     *         ya pertenece a otra persona.
+     */
+     ClienteResponse updateMyCliente(String username, ClienteUpdateRequest clienteUpdateRequest);
 }
