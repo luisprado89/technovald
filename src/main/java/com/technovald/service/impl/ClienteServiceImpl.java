@@ -1,12 +1,16 @@
 package com.technovald.service.impl;
 
 import com.technovald.dto.request.ClienteRegistroRequest;
+import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteRegistroResponse;
+import com.technovald.dto.response.ClienteResponse;
 import com.technovald.entity.Cliente;
 import com.technovald.entity.Persona;
 import com.technovald.entity.Usuario;
 import com.technovald.enums.RolUsuario;
 import com.technovald.exception.BusinessRuleException;
+import com.technovald.exception.ResourceNotFoundException;
+import com.technovald.mapper.ClienteMapper;
 import com.technovald.mapper.PersonaMapper;
 import com.technovald.repository.mysql.ClienteRepository;
 import com.technovald.repository.mysql.PersonaRepository;
@@ -44,6 +48,7 @@ public class ClienteServiceImpl implements ClienteService {
     private final UsuarioRepository usuarioRepository;
 
     private final PersonaMapper personaMapper;
+    private final ClienteMapper clienteMapper;
     private final CredentialGenerator credentialGenerator;
     private final PasswordEncoder passwordEncoder;
 
@@ -136,5 +141,83 @@ public class ClienteServiceImpl implements ClienteService {
                 .rol(usuario.getRol().name())
                 .token(token)
                 .build();
+    }
+
+    /**
+     * Obtiene los datos del cliente actualmente autenticado.
+     *
+     * @param username username del cliente extraído del JWT.
+     * @return DTO con la información del perfil del cliente.
+     * @throws ResourceNotFoundException si el usuario o el cliente no existen o están inactivos.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ClienteResponse getMyCliente(String username) {
+        Cliente cliente = clienteDelUsuario(username);
+        return clienteMapper.toResponse(cliente);
+    }
+
+    /**
+     * <p>Pasos:</p>
+     * <ol>
+     *     <li>Resuelve el cliente autenticado igual que la consulta.</li>
+     *     <li>Normaliza el email nuevo (minúsculas).</li>
+     *     <li>Comprueba que el email no pertenezca ya a otra persona.</li>
+     *     <li>Escribe los tres campos de contacto en la persona asociada.</li>
+     * </ol>
+     *
+     * <p>
+     * El nombre, el apellido y el DNI no se tocan: no están en el DTO de
+     * entrada, así que no hay forma de cambiarlos por esta vía.
+     * </p>
+     *
+     * @throws BusinessRuleException si el email nuevo ya es de otra persona.
+     */
+    @Override
+    @Transactional
+    public ClienteResponse updateMyCliente(String username, ClienteUpdateRequest request) {
+        Cliente cliente = clienteDelUsuario(username);
+        Persona persona = cliente.getPersona();
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        /*
+         * El email es único en toda la tabla persona. Solo se comprueba si
+         * cambia: reenviar el mismo email no puede chocar consigo mismo. La
+         * garantía real sigue siendo la clave uk_persona_email.
+         */
+        if (!email.equals(persona.getEmail()) && personaRepository.existsByEmail(email)) {
+            throw new BusinessRuleException("Ya existe otra persona registrada con el email indicado");
+        }
+        persona.setEmail(email);
+        persona.setTelefono(request.getTelefono().trim());
+        persona.setDireccion(request.getDireccion().trim());
+        personaRepository.save(persona);
+        log.info("Datos de contacto actualizados por el cliente '{}' (cliente id {})",
+                username, cliente.getId());
+        return clienteMapper.toResponse(cliente);
+    }
+
+    /**
+     * Resuelve el perfil de cliente activo del usuario autenticado.
+     *
+     * <p>
+     * Se recorre la cadena token → usuario → persona → cliente. Si el usuario
+     * es un administrador o un trabajador, la cadena se corta en el último
+     * paso: no tienen fila en {@code cliente}, y eso no es un error del
+     * cliente de la API sino la ausencia del recurso, así que se responde 404
+     * y no 400.
+     * </p>
+     *
+     * @param username username del usuario autenticado.
+     * @return el perfil de cliente activo.
+     * @throws ResourceNotFoundException si el usuario no existe o está
+     *                                   inactivo, o si no tiene perfil.
+     */
+    private Cliente clienteDelUsuario(String username) {
+        Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(username)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Usuario no encontrado o inactivo: " + username));
+        return clienteRepository.findByPersonaIdAndActivoTrue(usuario.getPersona().getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "El usuario autenticado no tiene un perfil de cliente activo"));
     }
 }

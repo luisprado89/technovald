@@ -28,14 +28,16 @@ TechNovaLD/
 │   │   │   │   └── SecurityConfig.java       # cadena de seguridad JWT
 │   │   │   ├── controller/
 │   │   │   │   ├── AuthController.java       # POST /api/auth/login
-│   │   │   │   └── ClienteController.java    # POST /api/clientes/register
+│   │   │   │   └── ClienteController.java    # alta de cliente y perfil propio
 │   │   │   ├── dto/
 │   │   │   │   ├── request/
 │   │   │   │   │   ├── ClienteRegistroRequest.java
+│   │   │   │   │   ├── ClienteUpdateRequest.java
 │   │   │   │   │   └── LoginRequest.java
 │   │   │   │   └── response/
 │   │   │   │       ├── AuthResponse.java
-│   │   │   │       └── ClienteRegistroResponse.java
+│   │   │   │       ├── ClienteRegistroResponse.java
+│   │   │   │       └── ClienteResponse.java
 │   │   │   ├── entity/                       # 10 entidades JPA (MySQL)
 │   │   │   ├── enums/                        # RolUsuario, EstadoPedido, EstadoSolicitud
 │   │   │   ├── exception/
@@ -43,6 +45,7 @@ TechNovaLD/
 │   │   │   │   ├── GlobalExceptionHandler.java
 │   │   │   │   └── ResourceNotFoundException.java
 │   │   │   ├── mapper/
+│   │   │   │   ├── ClienteMapper.java
 │   │   │   │   └── PersonaMapper.java
 │   │   │   ├── repository/mysql/             # repositorios JPA
 │   │   │   ├── security/
@@ -304,7 +307,7 @@ completo, o no se crea nada.
 
 - **Username**: `nombre.apellido`, en minúsculas, sin acentos y solo con
   `[a-z0-9]` (José García → `jose.garcia`). Si ese username ya está ocupado se
-  prueba `jose.garcia1`, `jose.garcia2`… hasta 100.000 candidatos.
+  prueba `jose.garcia1`, `jose.garcia2`… hasta 1000 candidatos.
 - **Contraseña**: 16 caracteres aleatorios (criptográficamente seguros) con al
   menos una mayúscula, una minúscula, un dígito y un símbolo **garantizados por
   construcción**, no por probabilidad. Se excluyen los caracteres ambiguos
@@ -314,7 +317,7 @@ completo, o no se crea nada.
   en claro se devuelve **una sola vez**, en la respuesta del alta, y no se
   escribe en ningún log.
 
-La política (longitud 16, 100.000 intentos de username) vive en las constantes de
+La política (longitud 16, 1000 intentos de username) vive en las constantes de
 `CredentialGenerator`: son valores fijos del sistema, no configurables, porque
 ningún entorno necesita hoy otros distintos.
 
@@ -336,9 +339,10 @@ El `token` es un JWT con la misma forma que el del login, así que el cliente
 queda autenticado nada más registrarse, sin pasar por
 `POST /api/auth/login` (aunque puede hacerlo: las credenciales funcionan).
 
-La respuesta **no** lleva cabecera `Location`: todavía no hay un endpoint que
+La respuesta **no** lleva cabecera `Location`: no hay ningún endpoint que
 consulte un cliente por su id, y apuntar a una ruta que responde 404 sería peor
-que no apuntar a ninguna.
+que no apuntar a ninguna. El cliente recién creado ya puede consultar su propio
+perfil en `GET /api/clientes/me`, que toma el id del token y no de la URL.
 
 ### Reglas de negocio
 
@@ -350,6 +354,72 @@ que no apuntar a ninguna.
 | Cuerpo ausente o JSON roto | **400** `El cuerpo de la petición no es un JSON válido o está vacío` |
 
 Todos los errores llegan con el formato uniforme de la sección siguiente.
+
+## 👤 Perfil del cliente
+
+`GET /api/clientes/me` y `PUT /api/clientes/me` son las dos rutas con las que un
+cliente consulta y actualiza sus propios datos. Ninguna lleva el id en la URL:
+el cliente se identifica con el token que valida el `JwtAuthenticationFilter`,
+así que no puede pedir el perfil de otro ni intentarlo.
+
+### Consultar el perfil — `200 OK`
+
+| Campo | Valor |
+| --- | --- |
+| Método | `GET` |
+| URL | `http://localhost:8080/api/clientes/me` |
+| Headers | `Authorization: Bearer <TOKEN>` |
+
+```json
+{
+  "id": 1,
+  "nombre": "Lucia",
+  "apellido": "Garcia Perez",
+  "email": "lucia.garcia@technovald.test",
+  "telefono": "600111222",
+  "direccion": "Calle Prueba 1",
+  "activo": true
+}
+```
+
+El DNI no aparece: es la clave de identidad de la persona y la API no la expone
+en ninguna respuesta. El alta de cliente tampoco lo devuelve.
+
+### Actualizar los datos de contacto — `200 OK`
+
+```json
+{
+  "email": "lucia.nueva@technovald.test",
+  "telefono": "600999888",
+  "direccion": "Avenida Nueva 42"
+}
+```
+
+Solo se pueden cambiar esos tres campos. El **nombre, el apellido y el DNI no
+son editables por esta vía**: no están en el DTO de entrada, así que enviarlos
+no tiene ningún efecto. Un cambio de nombre o de DNI no es una actualización de
+perfil, es un cambio de identidad, y esta operación no lo cubre.
+
+El email se guarda en minúsculas, y el teléfono y la dirección sin espacios
+sobrantes. La respuesta es el perfil ya actualizado, con la misma forma que la
+consulta, así que no hace falta volver a consultarlo.
+
+### Reglas de negocio
+
+| Caso | Respuesta |
+| --- | --- |
+| El token identifica a un usuario sin perfil de cliente (un administrador o un trabajador) | **404** `El usuario autenticado no tiene un perfil de cliente activo` |
+| El email nuevo ya pertenece a otra persona | **400** `Ya existe otra persona registrada con el email indicado` |
+| El email no tiene formato válido, o el teléfono o la dirección van vacíos | **400** con `campo: motivo` por cada campo |
+| Sin token, o con un token inválido o caducado | **401** |
+
+Las dos consultas buscan solo perfiles con `activo = 1`: un `cliente` dado de
+baja responde 404, igual que si no existiera. Y como el email es único en toda
+la tabla `persona`, reenviar el propio email no choca consigo mismo, aunque
+venga en mayúsculas.
+
+El cliente solo puede leer y editar **su** fila: el username sale del token,
+nunca de un id que venga en la petición.
 
 ## ⚠️ Formato de error uniforme
 
@@ -397,36 +467,18 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 - El token se manda **siempre en la cabecera `Authorization` manual**, no en la
   pestaña de Authorization de Postman.
 - `<TOKEN>` = el `token` que devuelve la prueba 1.
+- `<TOKEN_CLIENTE>` = el `token` que devuelve la prueba 4 (registro).
 
 ### 1. Login correcto → 200 + token
 
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `POST` |
-| URL | `http://localhost:8080/api/auth/login` |
-| Authorization | `No Auth` |
-| Headers | `Content-Type: application/json` |
-| Body | raw / JSON |
+**Request**: `POST http://localhost:8080/api/auth/login` con
+`Content-Type: application/json` y body:
 
 ```json
-{
-  "username": "admin.technovald",
-  "password": "admin"
-}
+{ "username": "admin.technovald", "password": "admin" }
 ```
 
-**Response** — `200 OK`
-
-```json
-{
-  "token": "eyJhbGciOiJIUzM4NCJ9...",
-  "username": "admin.technovald",
-  "rol": "ADMIN",
-  "expiracion": "2026-10-09T22:29:03"
-}
-```
+**Response** — `200 OK` con `token`, `username`, `rol`, `expiracion`.
 
 ### 2. Sin token → 401 (vacío)
 
@@ -438,28 +490,12 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 
 **Request**: `GET http://localhost:8080/` con `Authorization: Bearer <TOKEN>`.
 
-**Response** — `404 Not Found`
-
-```json
-{
-  "timestamp": "2026-10-11T12:30:52.856150",
-  "status": 404,
-  "error": "Not Found",
-  "message": "El endpoint solicitado no existe: /",
-  "path": "/"
-}
-```
+**Response** — `404 Not Found` con `"message": "El endpoint solicitado no existe: /"`.
 
 ### 4. Registro correcto → 201
 
-**Request**
-
-| Campo | Valor |
-| --- | --- |
-| Método | `POST` |
-| URL | `http://localhost:8080/api/clientes/register` |
-| Authorization | `No Auth` |
-| Headers | `Content-Type: application/json` |
+**Request**: `POST http://localhost:8080/api/clientes/register` con
+`Content-Type: application/json` y body:
 
 ```json
 {
@@ -472,43 +508,20 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 }
 ```
 
-**Response** — `201 Created`
-
-```json
-{
-  "id": 1,
-  "nombre": "Lucia",
-  "apellido": "Garcia Perez",
-  "username": "lucia.garcia",
-  "passwordInicial": "7N8u*yT-nY**%mCv",
-  "rol": "CLIENTE",
-  "token": "eyJhbGciOiJIUzM4NCJ9..."
-}
-```
+**Response** — `201 Created` con `id`, `nombre`, `apellido`, `username`,
+`passwordInicial`, `rol` y `token`.
 
 ### 5. DNI repetido → 400
 
 **Request**: mismo DNI, otro email.
 
-**Response** — `400 Bad Request`
-
-```json
-{
-  "message": "Ya existe una persona registrada con el DNI indicado"
-}
-```
+**Response** — `400 Bad Request` con `"message": "Ya existe una persona registrada con el DNI indicado"`.
 
 ### 6. Email repetido → 400
 
 **Request**: otro DNI, mismo email.
 
-**Response** — `400 Bad Request`
-
-```json
-{
-  "message": "Ya existe una persona registrada con el email indicado"
-}
-```
+**Response** — `400 Bad Request` con `"message": "Ya existe una persona registrada con el email indicado"`.
 
 ### 7. Username con sufijo → 201
 
@@ -524,23 +537,41 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
 
 ### 9. Datos inválidos → 400
 
-**Request**
-
-```json
-{
-  "nombre": "",
-  "apellido": "Perez",
-  "dni": "123",
-  "email": "no-es-un-email",
-  "telefono": "",
-  "direccion": ""
-}
-```
+**Request**: con campos vacíos, DNI inválido y email ilegible.
 
 **Response** — `400 Bad Request` con `message` que une los errores de todos los
-campos: `"dni: El DNI debe tener 8 números seguidos de una letra mayúscula,
-email: El email debe tener un formato válido, nombre: El nombre es obligatorio,
-direccion: La dirección es obligatoria, telefono: El teléfono es obligatorio"`.
+campos con formato `campo: motivo`.
+
+### 10. Mi perfil con el token del cliente → 200
+
+**Request**: `GET http://localhost:8080/api/clientes/me` con
+`Authorization: Bearer <TOKEN_CLIENTE>`.
+
+**Response** — `200 OK` con `id`, `nombre`, `apellido`, `email`, `telefono`,
+`direccion` y `activo`. No hay campo `dni`.
+
+### 11. Actualizar mis datos → 200
+
+**Request**: `PUT http://localhost:8080/api/clientes/me` con el token del cliente.
+
+```json
+{ "email": "lucia.nueva@technovald.test", "telefono": "600999888", "direccion": "Avenida Nueva 42" }
+```
+
+**Response** — `200 OK` con el perfil ya actualizado. Enviar además `"nombre"` o
+`"dni"` no cambia nada: no están en el DTO de entrada.
+
+### 12. Email de otra persona → 400
+
+**Request**: mismo `PUT`, con el email de otro cliente ya registrado.
+
+**Response** — `400 Bad Request` con `"message": "Ya existe otra persona registrada con el email indicado"`.
+
+### 13. Sin token y con token que no es de un cliente
+
+- `GET /api/clientes/me` sin cabecera `Authorization` → **401**, sin body.
+- `GET /api/clientes/me` con el token del administrador → **404** con
+  `"message": "El usuario autenticado no tiene un perfil de cliente activo"`.
 
 ### Resumen de resultados
 
@@ -555,6 +586,10 @@ direccion: La dirección es obligatoria, telefono: El teléfono es obligatorio"`
 | 7 | Username con sufijo | **201** | — |
 | 8 | Login con las credenciales generadas | **200** + token | — |
 | 9 | Datos inválidos | **400** | ✅ |
+| 10 | Mi perfil con token de cliente | **200** | — |
+| 11 | Actualizar mis datos | **200** | — |
+| 12 | Email de otra persona | **400** | ✅ |
+| 13 | Sin token / con token de admin | **401** / **404** | ❌ (el 401 viene de los filtros) / ✅ |
 
 ## 📊 Estado del proyecto
 
@@ -567,19 +602,25 @@ direccion: La dirección es obligatoria, telefono: El teléfono es obligatorio"`
 | Autenticación | ✅ login con JWT; el resto de rutas exige `Authorization: Bearer` |
 | Manejo de errores | ✅ formato uniforme en todos los errores que pasan por el dispatcher |
 | Registro de clientes | ✅ alta pública transaccional con credenciales generadas y token |
-| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); ninguno más todavía |
+| Perfil de cliente | ✅ el cliente consulta y actualiza sus datos con su token; el resto de usuarios recibe 404 |
+| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); `GET` y `PUT /api/clientes/me` (exigen token) |
 
 ## ⚠️ Deudas conocidas
 
-- **Dos altas simultáneas con el mismo DNI o email** pueden pasar las dos la
-  comprobación previa y dejar que sea MySQL quien rechace el segundo `INSERT`
+- **Dos altas simultáneas con el mismo DNI o email** (o dos actualizaciones de
+  perfil simultáneas con el mismo email) pueden pasar las dos la comprobación
+  previa y dejar que sea MySQL quien rechace el segundo `INSERT`
   por la restricción `UNIQUE`: esa petición recibe un `500` en lugar del `400`
   de negocio. La ventana es mínima y el dato **nunca** queda duplicado, porque
   la garantía real es la restricción de la base de datos.
+- **El orden de los errores por campo no está garantizado**: el
+  `GlobalExceptionHandler` une los mensajes según el orden en que se los dé
+  Hibernate Validator, que puede variar entre dos peticiones idénticas. Los
+  mensajes son siempre los mismos; solo cambia el orden en que aparecen.
 - **La contraseña inicial viaja en claro** en la respuesta del alta: es la
   única forma de que el cliente la conozca. En la base de datos solo queda su
   hash BCrypt.
-- **La política de credenciales es fija** (longitud 16, 100.00000 intentos de
+- **La política de credenciales es fija** (longitud 16, 1000 intentos de
   username) en las constantes de `CredentialGenerator`. Cuando existan perfiles
   `dev`/`prod`, se externalizará a `application.properties`.
 - **La validación del DNI solo comprueba el formato** (8 dígitos + letra
