@@ -1,8 +1,6 @@
 package com.technovald.config;
 
-
 import com.technovald.security.JwtAuthenticationFilter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,15 +19,18 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-
 /**
  * Configuración de seguridad de la API.
  *
  * <p>Autenticación por JWT: el login reparte el token y el
  * {@link JwtAuthenticationFilter} autentica cada petición que lo traiga en la
  * cabecera {@code Authorization}. Sin credenciales válidas la respuesta es
- * 401. Las reglas por rol se irán añadiendo a medida que existan endpoints
- * que las necesiten.</p>
+ * 401; con credenciales pero sin el rol exigido, 403.</p>
+ *
+ * <p>La gestión de empleados ({@code /api/admin/empleados/**}) es la primera
+ * ruta con regla por rol ({@code ADMIN}); el resto de rutas siguen exigiendo
+ * solo autenticación. Las reglas por rol se irán añadiendo aquí a medida que
+ * existan nuevos endpoints de administración.</p>
  */
 @Configuration
 @EnableWebSecurity
@@ -46,13 +47,11 @@ public class SecurityConfig {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
-
     /**
      * Cadena de filtros de seguridad.
      *
-     * @param http                   configuración de seguridad HTTP.
-     * @param authenticationProvider proveedor que comprueba las credenciales
-     *                               contra la tabla {@code usuario}.
+     * @param http configuración de seguridad HTTP.
+     * @param authenticationProvider proveedor que comprueba las credenciales contra la tabla {@code usuario}.
      * @return la cadena de filtros configurada.
      * @throws Exception si la configuración no se puede construir.
      */
@@ -66,29 +65,38 @@ public class SecurityConfig {
                  */
                 .csrf(csrf -> csrf.disable())
 
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        // El login es la única ruta pública: es la que reparte los tokens.
-                                                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                                               /*
+                        /*
                          * Rutas públicas: el login, que reparte los tokens, y el
                          * registro de clientes, que da de alta a alguien que
                          * todavía no tiene credenciales con las que autenticarse.
                          */
-                                                .requestMatchers(HttpMethod.POST,
-                                                        "/api/auth/login",
-                                                        "/api/clientes/register").permitAll()
-                /*
-                 * /error es el punto de entrada interno de Spring Boot para
-                 * cualquier error (404, 500...). Es un forward que hace el propio
-                 * framework, así que no tiene sentido exigir autenticación ahí:
-                 * si fuera protegida, un 404 legítimo se convertiría en un 401
-                 * engañoso.
-                 */
-                .requestMatchers("/error").permitAll()
-                .anyRequest().authenticated()
-                 )
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/auth/login",
+                                "/api/clientes/register").permitAll()
+
+                        /*
+                         * /error es el punto de entrada interno de Spring Boot para
+                         * cualquier error (404, 500...). Es un forward que hace el propio
+                         * framework, así que no tiene sentido exigir autenticación ahí:
+                         * si fuera protegida, un 404 legítimo se convertiría en un 401
+                         * engañoso.
+                         */
+                        .requestMatchers("/error").permitAll()
+
+                        /*
+                         * Gestión de empleados: es la primera regla por rol de la API.
+                         * Un usuario autenticado sin rol ADMIN recibe 403; sin token,
+                         * 401. La regla va por ruta, en un único sitio, para que no
+                         * pueda existir un endpoint de administración sin proteger.
+                         */
+                        .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
+
+                        .anyRequest().authenticated()
+                )
 
                 /*
                  * Sin credenciales válidas la respuesta es 401. Sin un punto de
@@ -96,7 +104,19 @@ public class SecurityConfig {
                  * un problema de permisos y no de identidad.
                  */
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+
+                        /*
+                         * Autenticado pero sin el rol exigido: 403. Se deja sin
+                         * cuerpo por el mismo motivo que el 401: la decisión la
+                         * toma la cadena de filtros, antes de que la petición
+                         * llegue al dispatcher.
+                         */
+                        .accessDeniedHandler((
+                                request,
+                                response,
+                                accessDeniedException) ->
+                                response.setStatus(HttpStatus.FORBIDDEN.value())))
 
                 .authenticationProvider(authenticationProvider)
 
