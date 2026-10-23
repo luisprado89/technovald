@@ -27,17 +27,21 @@ TechNovaLD/
 │   │   │   ├── config/
 │   │   │   │   └── SecurityConfig.java       # cadena de seguridad JWT
 │   │   │   ├── controller/
+│   │   │   │   ├── AdminEmpleadoController.java  # alta y consulta de empleados (ADMIN)
 │   │   │   │   ├── AuthController.java       # POST /api/auth/login
 │   │   │   │   └── ClienteController.java    # alta de cliente y perfil propio
 │   │   │   ├── dto/
 │   │   │   │   ├── request/
 │   │   │   │   │   ├── ClienteRegistroRequest.java
 │   │   │   │   │   ├── ClienteUpdateRequest.java
+│   │   │   │   │   ├── EmpleadoRegistroRequest.java
 │   │   │   │   │   └── LoginRequest.java
 │   │   │   │   └── response/
 │   │   │   │       ├── AuthResponse.java
 │   │   │   │       ├── ClienteRegistroResponse.java
-│   │   │   │       └── ClienteResponse.java
+│   │   │   │       ├── ClienteResponse.java
+│   │   │   │       ├── EmpleadoRegistroResponse.java
+│   │   │   │       └── EmpleadoResponse.java
 │   │   │   ├── entity/                       # 10 entidades JPA (MySQL)
 │   │   │   ├── enums/                        # RolUsuario, EstadoPedido, EstadoSolicitud
 │   │   │   ├── exception/
@@ -46,6 +50,7 @@ TechNovaLD/
 │   │   │   │   └── ResourceNotFoundException.java
 │   │   │   ├── mapper/
 │   │   │   │   ├── ClienteMapper.java
+│   │   │   │   ├── EmpleadoMapper.java
 │   │   │   │   └── PersonaMapper.java
 │   │   │   ├── repository/mysql/             # repositorios JPA
 │   │   │   ├── security/
@@ -58,9 +63,11 @@ TechNovaLD/
 │   │   │   └── service/
 │   │   │       ├── AuthService.java
 │   │   │       ├── ClienteService.java
+│   │   │       ├── EmpleadoService.java
 │   │   │       └── impl/
 │   │   │           ├── AuthServiceImpl.java
-│   │   │           └── ClienteServiceImpl.java
+│   │   │           ├── ClienteServiceImpl.java
+│   │   │           └── EmpleadoServiceImpl.java
 │   │   └── resources/
 │   │       ├── application.properties        # configuración de la aplicación
 │   │       └── db/migration/
@@ -171,6 +178,7 @@ contexto (`TechNovaLdApplicationTests`) arranca la aplicación completa, así qu
 | `Migration checksum mismatch` | se editó una migración ya aplicada; hay que restaurarla tal cual estaba o recrear la base de datos |
 | `Schema-validation: missing table [...]` o `wrong column type` | una entidad y su tabla no coinciden; hay que corregir la que esté mal |
 | `401` en el login con credenciales que deberían ser correctas | contraseña equivocada, o el usuario está dado de baja (`activo = 0`) |
+| `403` en `/api/admin/empleados` con un token que funciona en otras rutas | el token no es de un usuario con rol `ADMIN` |
 
 ## 🗄️ Base de datos
 
@@ -283,6 +291,11 @@ En cada petición, el filtro comprueba la firma, vuelve a cargar el usuario de l
 base de datos y deja la petición autenticada. Si el token falta, está
 manipulado, ha caducado, o su usuario ya no existe o está dado de baja, la
 respuesta es **401**.
+
+El rol se comprueba solo en las rutas que lo exigen. Hoy hay una: la gestión de
+empleados (`/api/admin/empleados/**`), reservada a `ADMIN`. Con un token válido
+de `TRABAJADOR` o de `CLIENTE` la respuesta es **403**: el 401 dice "no sé
+quién eres"; el 403, "sé quién eres, pero no puedes pasar".
 
 ## 🧾 Registro de clientes
 
@@ -421,6 +434,127 @@ venga en mayúsculas.
 El cliente solo puede leer y editar **su** fila: el username sale del token,
 nunca de un id que venga en la petición.
 
+## 🧑‍💼 Gestión de empleados (solo ADMIN)
+
+`POST /api/admin/empleados`, `GET /api/admin/empleados` y
+`GET /api/admin/empleados/{id}` son las rutas con las que el administrador da
+de alta al personal y consulta el directorio. Las tres exigen un token con rol
+`ADMIN`: con un token de `CLIENTE` o de `TRABAJADOR` la respuesta es **403**, y
+sin token, **401**.
+
+### Qué se crea
+
+En una sola transacción se persisten tres filas:
+
+| Tabla | Qué se guarda |
+| --- | --- |
+| `persona` | nombre, apellido, DNI, email, teléfono y dirección |
+| `usuario` | username generado, hash BCrypt de la contraseña generada y el rol recibido (`ADMIN` o `TRABAJADOR`) |
+| `empleado` | el perfil laboral, enlazado con su persona y con el mismo rol |
+
+El rol queda en dos sitios a propósito: `usuario.rol` es el que lee el filtro
+del token para autorizar cada petición, y `empleado.rol` permite consultar el
+sub-rol del empleado sin hacer un `JOIN` contra `usuario`. El alta escribe el
+mismo valor en los dos, así que no pueden divergir.
+
+Si algo falla a mitad, no queda ninguna de las tres: o se crea el empleado
+completo, o no se crea nada.
+
+### Cómo se generan las credenciales
+
+Son las mismas reglas que en el alta de clientes (`CredentialGenerator`):
+`nombre.apellido` en minúsculas y sin acentos, con sufijo numérico si el
+username ya está ocupado, y una contraseña de 16 caracteres que garantiza
+mayúscula, minúscula, dígito y símbolo. En la base de datos solo queda el hash
+BCrypt; la contraseña en claro se devuelve **una sola vez**, en la respuesta del
+alta, para que el administrador se la entregue al empleado.
+
+### Alta — `201 Created`
+
+**Request**: `POST http://localhost:8080/api/admin/empleados` con
+`Authorization: Bearer <TOKEN>` y `Content-Type: application/json`:
+
+```json
+{
+  "nombre": "Pablo",
+  "apellido": "Sanz Gil",
+  "dni": "87654321X",
+  "email": "pablo.sanz@technovald.test",
+  "telefono": "600555666",
+  "direccion": "Calle Empleado 1",
+  "rol": "TRABAJADOR"
+}
+```
+
+**Response**:
+
+```json
+{
+  "id": 2,
+  "nombre": "Pablo",
+  "apellido": "Sanz Gil",
+  "username": "pablo.sanz",
+  "passwordInicial": "+-QnysaDvU2?LG_4",
+  "rol": "TRABAJADOR"
+}
+```
+
+La respuesta **no** lleva token: quien crea la cuenta es el administrador, que
+ya está autenticado, y el token lo pide el empleado al hacer login con las
+credenciales que se le entregan. Sí lleva la cabecera
+`Location: /api/admin/empleados/2`, que apunta a la consulta por id.
+
+### Consultar el directorio — `200 OK`
+
+`GET /api/admin/empleados` devuelve todos los empleados ordenados por id,
+incluido el administrador que creó el bootstrap:
+
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Admin",
+    "apellido": "TechNovaLD",
+    "email": "admin.technovald@technovald.local",
+    "telefono": "600000000",
+    "direccion": "Bootstrap",
+    "username": "admin.technovald",
+    "rol": "ADMIN",
+    "activo": true
+  },
+  {
+    "id": 2,
+    "nombre": "Pablo",
+    "apellido": "Sanz Gil",
+    "email": "pablo.sanz@technovald.test",
+    "telefono": "600555666",
+    "direccion": "Calle Empleado 1",
+    "username": "pablo.sanz",
+    "rol": "TRABAJADOR",
+    "activo": true
+  }
+]
+```
+
+`GET /api/admin/empleados/{id}` devuelve ese mismo objeto para un id concreto, y
+**404** con el formato uniforme si el id no existe.
+
+### Reglas de negocio
+
+| Caso | Respuesta |
+| --- | --- |
+| DNI ya registrado | **400** `Ya existe una persona registrada con el DNI indicado` |
+| Email ya registrado | **400** `Ya existe una persona registrada con el email indicado` |
+| Rol `CLIENTE` | **400** `El empleado solo puede tener los roles ADMIN o TRABAJADOR` |
+| Rol ausente, DNI con formato inválido, campos vacíos o email ilegible | **400** con `campo: motivo` por cada campo |
+| Id inexistente | **404** `Empleado no encontrado con id: <id>` |
+| Sin token, o con un token inválido o caducado | **401** |
+| Token válido de `CLIENTE` o de `TRABAJADOR` | **403** |
+
+Un cliente no puede darse de alta como empleado: su DNI y su email ya están en
+la tabla `persona`, así que el alta responde **400** con el mensaje de duplicado
+que corresponda.
+
 ## ⚠️ Formato de error uniforme
 
 Todas las respuestas de error de la API siguen la misma estructura, definida
@@ -449,13 +583,19 @@ por el `record` anidado `GlobalExceptionHandler.ErrorResponse`:
 | Excepciones de Spring MVC | **su status** | 405, 415, 400... respetados |
 | Cualquier otra | **500** | Error interno con mensaje genérico |
 
-### Nota sobre los 401 de la cadena de filtros
+### Nota sobre los 401 y 403 de la cadena de filtros
 
 Los **401 que devuelve el `JwtAuthenticationFilter`** (token ausente,
-manipulado o caducado) **no pasan por el `GlobalExceptionHandler`**: Spring
-Security resuelve la petición antes de que llegue al `DispatcherServlet`. Esos
-401 se devuelven **sin cuerpo**. Los 401 del login (credenciales incorrectas),
-en cambio, sí pasan por el handler y llevan el formato uniforme.
+manipulado o caducado) y los **403 de la autorización por rol** (token válido
+de un rol que no es el exigido) **no pasan por el `GlobalExceptionHandler`**:
+Spring Security resuelve la petición antes de que llegue al `DispatcherServlet`.
+Unos y otros se devuelven **sin cuerpo**. Los 401 del login (credenciales
+incorrectas), en cambio, sí pasan por el handler y llevan el formato uniforme.
+
+El 403 lo escribe un `AccessDeniedHandler` de la propia `SecurityConfig`, que
+solo fija el código de estado. Sin él, Spring Security haría `sendError` y la
+respuesta llevaría el cuerpo de error por defecto de Spring Boot, distinto del
+uniforme de la API.
 
 ## 🧪 Probar la API con Postman
 
@@ -468,6 +608,7 @@ Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
   pestaña de Authorization de Postman.
 - `<TOKEN>` = el `token` que devuelve la prueba 1.
 - `<TOKEN_CLIENTE>` = el `token` que devuelve la prueba 4 (registro).
+- `<ID>` = el `id` que devuelve la prueba 14 (en el ejemplo, `2`).
 
 ### 1. Login correcto → 200 + token
 
@@ -573,6 +714,242 @@ campos con formato `campo: motivo`.
 - `GET /api/clientes/me` con el token del administrador → **404** con
   `"message": "El usuario autenticado no tiene un perfil de cliente activo"`.
 
+### 14. Alta de empleado (TRABAJADOR) → 201
+
+**Request**: `POST http://localhost:8080/api/admin/empleados` con
+`Authorization: Bearer <TOKEN>`, `Content-Type: application/json` y body:
+
+```json
+{
+  "nombre": "Pablo",
+  "apellido": "Sanz Gil",
+  "dni": "87654321X",
+  "email": "pablo.sanz@technovald.test",
+  "telefono": "600555666",
+  "direccion": "Calle Empleado 1",
+  "rol": "TRABAJADOR"
+}
+```
+
+**Response** — `201 Created` con `id`, `nombre`, `apellido`, `username`,
+`passwordInicial` y `rol`, y cabecera `Location: /api/admin/empleados/<ID>`. No
+incluye `token`.
+
+```json
+{
+  "id": 2,
+  "nombre": "Pablo",
+  "apellido": "Sanz Gil",
+  "username": "pablo.sanz",
+  "passwordInicial": "+-QnysaDvU2?LG_4",
+  "rol": "TRABAJADOR"
+}
+```
+
+Guardar el `username` y la `passwordInicial`: los usa la prueba 15.
+
+### 15. Login con las credenciales del empleado → 200
+
+**Request**: `POST http://localhost:8080/api/auth/login` con el `username` y la
+`passwordInicial` exactos de la prueba 14.
+
+```json
+{ "username": "pablo.sanz", "password": "+-QnysaDvU2?LG_4" }
+```
+
+**Response** — `200 OK` con `token`, `username`, `rol` y `expiracion`, y
+`"rol": "TRABAJADOR"`. El empleado ya puede autenticarse con las credenciales
+que le entregó el administrador.
+
+### 16. Directorio de empleados → 200
+
+**Request**: `GET http://localhost:8080/api/admin/empleados` con
+`Authorization: Bearer <TOKEN>`.
+
+**Response** — `200 OK` con un array JSON. Tienen que aparecer el administrador
+(`admin.technovald`) y el empleado recién creado (`pablo.sanz`).
+
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Admin",
+    "apellido": "TechNovaLD",
+    "email": "admin.technovald@technovald.local",
+    "telefono": "600000000",
+    "direccion": "Bootstrap",
+    "username": "admin.technovald",
+    "rol": "ADMIN",
+    "activo": true
+  },
+  {
+    "id": 2,
+    "nombre": "Pablo",
+    "apellido": "Sanz Gil",
+    "email": "pablo.sanz@technovald.test",
+    "telefono": "600555666",
+    "direccion": "Calle Empleado 1",
+    "username": "pablo.sanz",
+    "rol": "TRABAJADOR",
+    "activo": true
+  }
+]
+```
+
+### 17. Empleado por id → 200 / 404
+
+#### 17.1 Empleado existente → 200
+
+**Request**: `GET http://localhost:8080/api/admin/empleados/<ID>` con
+`Authorization: Bearer <TOKEN>` (el id de la prueba 14).
+
+**Response** — `200 OK` con los datos de Pablo, incluidos `username`, `rol` y
+`activo`.
+
+```json
+{
+  "id": 2,
+  "nombre": "Pablo",
+  "apellido": "Sanz Gil",
+  "email": "pablo.sanz@technovald.test",
+  "telefono": "600555666",
+  "direccion": "Calle Empleado 1",
+  "username": "pablo.sanz",
+  "rol": "TRABAJADOR",
+  "activo": true
+}
+```
+
+#### 17.2 Empleado inexistente → 404
+
+**Request**: `GET http://localhost:8080/api/admin/empleados/99999999` con
+`Authorization: Bearer <TOKEN>`.
+
+**Response** — `404 Not Found` con el formato uniforme:
+
+```json
+{
+  "timestamp": "2026-10-23T02:35:08.2228529",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Empleado no encontrado con id: 99999999",
+  "path": "/api/admin/empleados/99999999"
+}
+```
+
+### 18. Rol y duplicados → 400
+
+#### 18.1 Rol CLIENTE → 400
+
+**Request**: `POST http://localhost:8080/api/admin/empleados` con
+`Authorization: Bearer <TOKEN>` y body:
+
+```json
+{
+  "nombre": "Otro",
+  "apellido": "Empleado",
+  "dni": "11111111A",
+  "email": "otro.cliente@test.com",
+  "telefono": "600000000",
+  "direccion": "Calle Otra 1",
+  "rol": "CLIENTE"
+}
+```
+
+**Response** — `400 Bad Request` con
+`"message": "El empleado solo puede tener los roles ADMIN o TRABAJADOR"`.
+
+```json
+{
+  "timestamp": "2026-10-23T02:36:46.657206",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "El empleado solo puede tener los roles ADMIN o TRABAJADOR",
+  "path": "/api/admin/empleados"
+}
+```
+
+#### 18.2 DNI duplicado → 400
+
+**Request**: el mismo `POST`, con el DNI de la prueba 14:
+
+```json
+{
+  "nombre": "Otro",
+  "apellido": "Empleado",
+  "dni": "87654321X",
+  "email": "dni.repetido@test.com",
+  "telefono": "600000000",
+  "direccion": "Calle Otra 1",
+  "rol": "TRABAJADOR"
+}
+```
+
+**Response** — `400 Bad Request` con
+`"message": "Ya existe una persona registrada con el DNI indicado"`.
+
+```json
+{
+  "timestamp": "2026-10-23T02:37:53.348603",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Ya existe una persona registrada con el DNI indicado",
+  "path": "/api/admin/empleados"
+}
+```
+
+#### 18.3 Email duplicado → 400
+
+**Request**: el mismo `POST`, con el email de la prueba 14:
+
+```json
+{
+  "nombre": "Otro",
+  "apellido": "Empleado",
+  "dni": "22222222B",
+  "email": "pablo.sanz@technovald.test",
+  "telefono": "600000000",
+  "direccion": "Calle Otra 1",
+  "rol": "TRABAJADOR"
+}
+```
+
+**Response** — `400 Bad Request` con
+`"message": "Ya existe una persona registrada con el email indicado"`.
+
+```json
+{
+  "timestamp": "2026-10-23T02:38:19.2714048",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Ya existe una persona registrada con el email indicado",
+  "path": "/api/admin/empleados"
+}
+```
+
+### 19. Sin token y con token sin rol ADMIN
+
+#### 19.1 Sin token → 401
+
+**Request**: `GET http://localhost:8080/api/admin/empleados` con la pestaña
+`Authorization` en `No Auth`.
+
+**Response** — `401 Unauthorized` con el body **completamente vacío**.
+
+#### 19.2 Token de CLIENTE → 403
+
+**Request**: el mismo `GET`, con `Authorization: Bearer <TOKEN_CLIENTE>`.
+
+**Response** — `403 Forbidden` con el body **completamente vacío**.
+
+#### 19.3 POST con token de CLIENTE → 403
+
+**Request**: `POST http://localhost:8080/api/admin/empleados` con
+`Authorization: Bearer <TOKEN_CLIENTE>` y cualquier body válido.
+
+**Response** — `403 Forbidden` con el body **completamente vacío**: la regla de
+rol se comprueba antes de leer el cuerpo de la petición.
+
 ### Resumen de resultados
 
 | # | Petición | Resultado | Formato uniforme |
@@ -590,6 +967,12 @@ campos con formato `campo: motivo`.
 | 11 | Actualizar mis datos | **200** | — |
 | 12 | Email de otra persona | **400** | ✅ |
 | 13 | Sin token / con token de admin | **401** / **404** | ❌ (el 401 viene de los filtros) / ✅ |
+| 14 | Alta de empleado | **201** + credenciales | — |
+| 15 | Login del empleado | **200** + token | — |
+| 16 | Directorio de empleados | **200** | — |
+| 17 | Empleado por id / id inexistente | **200** / **404** | ✅ (el 404) |
+| 18 | Rol CLIENTE y duplicados | **400** | ✅ |
+| 19 | Sin token / token de CLIENTE | **401** / **403** | ❌ (vienen de los filtros) |
 
 ## 📊 Estado del proyecto
 
@@ -599,27 +982,30 @@ campos con formato `campo: motivo`.
 | Arranque | ✅ arranca y conecta a MySQL |
 | Esquema | ✅ 10 tablas versionadas por Flyway (1 migración) |
 | Modelo JPA | ✅ 10 entidades y 3 enums, validados contra el esquema al arrancar |
-| Autenticación | ✅ login con JWT; el resto de rutas exige `Authorization: Bearer` |
+| Autenticación | ✅ login con JWT; el resto de rutas exige `Authorization: Bearer`, y la gestión de empleados exige además rol `ADMIN` |
 | Manejo de errores | ✅ formato uniforme en todos los errores que pasan por el dispatcher |
 | Registro de clientes | ✅ alta pública transaccional con credenciales generadas y token |
 | Perfil de cliente | ✅ el cliente consulta y actualiza sus datos con su token; el resto de usuarios recibe 404 |
-| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); `GET` y `PUT /api/clientes/me` (exigen token) |
+| Gestión de empleados | ✅ el `ADMIN` da de alta cuentas `ADMIN`/`TRABAJADOR` y consulta el directorio; el resto de roles recibe 403 |
+| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); `GET` y `PUT /api/clientes/me` (exigen token); `POST /api/admin/empleados` y `GET /api/admin/empleados[/{id}]` (exigen token de `ADMIN`) |
 
 ## ⚠️ Deudas conocidas
 
-- **Dos altas simultáneas con el mismo DNI o email** (o dos actualizaciones de
-  perfil simultáneas con el mismo email) pueden pasar las dos la comprobación
-  previa y dejar que sea MySQL quien rechace el segundo `INSERT`
-  por la restricción `UNIQUE`: esa petición recibe un `500` en lugar del `400`
-  de negocio. La ventana es mínima y el dato **nunca** queda duplicado, porque
-  la garantía real es la restricción de la base de datos.
+- **Dos altas simultáneas con el mismo DNI o email** (de cliente o de empleado,
+  o dos actualizaciones de perfil simultáneas con el mismo email) pueden pasar
+  las dos la comprobación previa y dejar que sea MySQL quien rechace el segundo
+  `INSERT` por la restricción `UNIQUE`: esa petición recibe un `500` en lugar
+  del `400` de negocio. La ventana es mínima y el dato **nunca** queda
+  duplicado, porque la garantía real es la restricción de la base de datos.
 - **El orden de los errores por campo no está garantizado**: el
   `GlobalExceptionHandler` une los mensajes según el orden en que se los dé
   Hibernate Validator, que puede variar entre dos peticiones idénticas. Los
   mensajes son siempre los mismos; solo cambia el orden en que aparecen.
-- **La contraseña inicial viaja en claro** en la respuesta del alta: es la
-  única forma de que el cliente la conozca. En la base de datos solo queda su
-  hash BCrypt.
+- **La contraseña inicial viaja en claro** en la respuesta del alta, tanto en el
+  registro de clientes como en el alta de empleados: es la única forma de que el
+  cliente o el administrador la conozcan. En la base de datos solo queda su hash
+  BCrypt. En el caso del empleado, el administrador tiene que entregársela en
+  persona: no hay envío automático por email.
 - **La política de credenciales es fija** (longitud 16, 1000 intentos de
   username) en las constantes de `CredentialGenerator`. Cuando existan perfiles
   `dev`/`prod`, se externalizará a `application.properties`.
@@ -630,6 +1016,10 @@ campos con formato `campo: motivo`.
   firma** (los bits de padding del Base64 se ignoran). No es explotable: el
   token sigue siendo del mismo usuario, con la misma caducidad y la misma
   versión de credenciales. Se documenta como comportamiento conocido de JJWT.
-- **Los 401 de la cadena de filtros no llevan cuerpo** (ni formato uniforme):
-  Spring Security resuelve la petición antes del dispatcher, así que el
-  `GlobalExceptionHandler` no puede darles cuerpo.
+- **El directorio de empleados no está paginado**: `GET /api/admin/empleados`
+  devuelve todas las fichas en una sola respuesta. Con una plantilla de decenas
+  de personas es suficiente; si crece, habrá que paginarlo.
+- **Los 401 y 403 de la cadena de filtros no llevan cuerpo** (ni formato
+  uniforme): Spring Security resuelve la petición antes del dispatcher, así que
+  el `GlobalExceptionHandler` no puede darles cuerpo. El 403 solo lo emite la
+  autorización por rol.
