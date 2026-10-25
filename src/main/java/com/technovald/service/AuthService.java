@@ -1,6 +1,8 @@
 package com.technovald.service;
 
 
+import com.technovald.dto.request.ChangePasswordRequest;
+import com.technovald.dto.request.ForgotPasswordRequest;
 import com.technovald.dto.request.LoginRequest;
 import com.technovald.dto.response.AuthResponse;
 
@@ -29,4 +31,18 @@ public interface AuthService {
      * @return DTO con el token JWT, el username, el rol y la fecha de expiración.
      */
     AuthResponse login(LoginRequest loginRequest);
+
+    /**
+     * Genera una contraseña temporal y la envía por email si la cuenta existe
+     * y está activa. No revela si el email está registrado.
+     */
+    void forgotPassword(ForgotPasswordRequest forgotPasswordRequest);
+
+    /**
+     * Cambia la contraseña del usuario autenticado e invalida sus tokens.
+     *
+     * @throws com.technovald.exception.BusinessRuleException si la actual no
+     *         coincide o la nueva es igual a la actual.
+     */
+    void changePassword(String username, ChangePasswordRequest changePasswordRequest);
 }

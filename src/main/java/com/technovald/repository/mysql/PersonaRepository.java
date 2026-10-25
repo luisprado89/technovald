@@ -4,6 +4,8 @@ import com.technovald.entity.Persona;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 /**
  * Repositorio JPA para la entidad {@link Persona}.
  *
@@ -38,4 +40,10 @@ public interface PersonaRepository extends JpaRepository<Persona, Long> {
 * @return {@code true} si el email ya está registrado.
 */
     boolean existsByEmail(String email);
+
+    /**
+     * Busca una persona por email. El email es único, así que devuelve como
+     * mucho una fila. Lo usa la recuperación de contraseña.
+     */
+    Optional<Persona> findByEmail(String email);
 }
