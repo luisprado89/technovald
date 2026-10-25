@@ -99,16 +99,17 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         /*
-                         * Rutas públicas: el login, que reparte los tokens, y el
-                         * registro de clientes, que da de alta a alguien que
-                         * todavía no tiene credenciales con las que autenticarse.
+                         * Rutas públicas: el login, la recuperación de contraseña
+                         * y el registro de clientes.
                          */
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
+                                "/api/auth/forgot-password",
                                 "/api/clientes/register").permitAll()
+
                         // Frontend estático: público. La API sigue protegida.
                         .requestMatchers("/", "/*.html", "/css/**", "/js/**", "/img/**", "/favicon.ico")
-                            .permitAll()
+                        .permitAll()
 
                         /*
                          * Swagger se abre sin token; el resto de rutas, no.
@@ -117,37 +118,29 @@ public class SecurityConfig {
 
                         /*
                          * /error es el punto de entrada interno de Spring Boot para
-                         * cualquier error (404, 500...). Es un forward que hace el propio
-                         * framework, así que no tiene sentido exigir autenticación ahí:
-                         * si fuera protegida, un 404 legítimo se convertiría en un 401
-                         * engañoso.
+                         * cualquier error (404, 500...).
                          */
                         .requestMatchers("/error").permitAll()
 
                         /*
                          * Gestión de empleados: es la primera regla por rol de la API.
-                         * Un usuario autenticado sin rol ADMIN recibe 403; sin token,
-                         * 401. La regla va por ruta, en un único sitio, para que no
-                         * pueda existir un endpoint de administración sin proteger.
                          */
                         .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
+
+                        // Explícito aunque anyRequest() ya lo cubra.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
                         .anyRequest().authenticated()
                 )
 
                 /*
-                 * Sin credenciales válidas la respuesta es 401. Sin un punto de
-                 * entrada propio, Spring Security devolvería 403, que describe
-                 * un problema de permisos y no de identidad.
+                 * Sin credenciales válidas la respuesta es 401.
                  */
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
 
                         /*
-                         * Autenticado pero sin el rol exigido: 403. Se deja sin
-                         * cuerpo por el mismo motivo que el 401: la decisión la
-                         * toma la cadena de filtros, antes de que la petición
-                         * llegue al dispatcher.
+                         * Autenticado pero sin el rol exigido: 403. Se deja sin cuerpo.
                          */
                         .accessDeniedHandler((
                                 request,
@@ -158,9 +151,7 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider)
 
                 /*
-                 * El filtro del token va antes del filtro de usuario y
-                 * contraseña: cuando la petición llegue ahí, o ya está
-                 * autenticada por token, o no hay nada que autenticar.
+                 * El filtro del token va antes del filtro de usuario y contraseña.
                  */
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -168,7 +159,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Configuración CORS con orígenes fijos (localhost:3000 y localhost:5173).
+     * Configuración CORS con orígenes fijos.
      * La API autentica con Bearer, por lo que no se permiten cookies.
      *
      * @return fuente de configuración CORS.
@@ -187,8 +178,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Codificador de contraseñas. BCrypt aplica un hash con sal aleatoria, así
-     * que la misma contraseña produce un hash distinto cada vez.
+     * Codificador de contraseñas (BCrypt).
      *
      * @return el codificador que se usa para guardar y comprobar contraseñas.
      */
@@ -198,9 +188,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Proveedor de autenticación: combina el
-     * {@link com.technovald.security.CustomUserDetailsService} con el
-     * codificador para comparar la contraseña recibida con el hash almacenado.
+     * Proveedor de autenticación.
      *
      * @param userDetailsService servicio que carga el usuario desde MySQL.
      * @param passwordEncoder    codificador de contraseñas.
