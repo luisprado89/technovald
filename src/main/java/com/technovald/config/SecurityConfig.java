@@ -74,8 +74,8 @@ public class SecurityConfig {
     /**
      * Cadena de filtros de seguridad.
      *
-     * @param http configuración de seguridad HTTP.
-     * @param authenticationProvider proveedor que comprueba las credenciales contra la tabla {@code usuario}.
+     * @param http                    configuración de seguridad HTTP.
+     * @param authenticationProvider  proveedor que comprueba las credenciales contra la tabla {@code usuario}.
      * @param corsConfigurationSource fuente de configuración para CORS.
      * @return la cadena de filtros configurada.
      * @throws Exception si la configuración no se puede construir.
@@ -106,6 +106,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
                                 "/api/clientes/register").permitAll()
+                        // Frontend estático: público. La API sigue protegida.
+                        .requestMatchers("/", "/*.html", "/css/**", "/js/**", "/img/**", "/favicon.ico")
+                            .permitAll()
 
                         /*
                          * Swagger se abre sin token; el resto de rutas, no.

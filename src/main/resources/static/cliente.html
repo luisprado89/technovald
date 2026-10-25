@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TechNovaLD · Mi cuenta</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <span class="brand__mark" aria-hidden="true">TN</span>
+        <span>TechNovaLD<small>Mi cuenta</small></span>
+    </div>
+    <div class="acciones">
+        <span class="topbar__hint">Conectado como <strong data-usuario></strong> · <span data-rol></span></span>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-salir">Cerrar sesión</button>
+    </div>
+</header>
+
+<main class="page page--narrow">
+    <div class="page__head">
+        <div>
+            <h1>Mi perfil</h1>
+            <p>Cliente <span id="perfil-id" class="muted"></span> · <span class="badge" id="perfil-estado">—</span></p>
+        </div>
+    </div>
+
+    <div id="aviso" class="aviso" role="alert" hidden></div>
+
+    <section class="card">
+        <div class="panel is-active">
+            <h2>Datos de contacto</h2>
+            <p class="lead">El nombre, los apellidos y el DNI no se editan desde aquí.</p>
+
+            <form id="form-perfil" novalidate>
+                <div class="grid">
+                    <div class="field">
+                        <label for="perfil-nombre">Nombre</label>
+                        <input id="perfil-nombre" disabled>
+                    </div>
+                    <div class="field">
+                        <label for="perfil-apellido">Apellidos</label>
+                        <input id="perfil-apellido" disabled>
+                    </div>
+                    <div class="field full">
+                        <label for="perfil-email">Email</label>
+                        <input id="perfil-email" name="email" type="email" maxlength="100" required>
+                    </div>
+                    <div class="field">
+                        <label for="perfil-telefono">Teléfono</label>
+                        <input id="perfil-telefono" name="telefono" type="tel" maxlength="20" required>
+                    </div>
+                    <div class="field">
+                        <label for="perfil-usuario">Usuario</label>
+                        <input id="perfil-usuario" disabled>
+                    </div>
+                    <div class="field full">
+                        <label for="perfil-direccion">Dirección</label>
+                        <input id="perfil-direccion" name="direccion" maxlength="255" required>
+                    </div>
+                </div>
+
+                <div class="acciones">
+                    <button class="btn" type="submit">Guardar cambios</button>
+                    <button class="btn btn--ghost" type="button" id="btn-descartar">Descartar cambios</button>
+                </div>
+            </form>
+        </div>
+    </section>
+</main>
+
+<p class="pie">TechNovaLD · API REST</p>
+
+<script type="module" src="js/cliente.js"></script>
+</body>
+</html>

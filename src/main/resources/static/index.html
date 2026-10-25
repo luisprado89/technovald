@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TechNovaLD · Acceso</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <span class="brand__mark" aria-hidden="true">TN</span>
+        <span>TechNovaLD<small>Backoffice de tienda</small></span>
+    </div>
+    <span class="topbar__hint">API en http://localhost:8080</span>
+</header>
+
+<main class="auth">
+    <section class="card" aria-label="Acceso y registro">
+
+        <div class="sesion" id="banner-sesion" hidden>
+            <span>Sesión iniciada como <strong data-usuario></strong> · <span data-rol></span></span>
+            <div class="acciones">
+                <a class="btn btn--ghost btn--sm" id="btn-panel" href="#">Ir a mi panel</a>
+                <button type="button" class="btn btn--ghost btn--sm" id="btn-salir">Cerrar sesión</button>
+            </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Acceso o registro">
+            <button class="tab is-active" data-panel="login" role="tab" aria-selected="true"
+                    aria-controls="form-login">Entrar</button>
+            <button class="tab" data-panel="registro" role="tab" aria-selected="false"
+                    aria-controls="form-registro">Crear cuenta</button>
+        </div>
+
+        <div id="aviso" class="aviso" role="alert" hidden></div>
+
+        <form id="form-login" class="panel is-active" data-panel="login" novalidate>
+            <h2>Iniciar sesión</h2>
+            <p class="lead">Usa tus credenciales de TechNovaLD.</p>
+            <div class="grid">
+                <div class="field full">
+                    <label for="login-username">Usuario</label>
+                    <input id="login-username" name="username" autocomplete="username" required>
+                </div>
+                <div class="field full">
+                    <label for="login-password">Contraseña</label>
+                    <input id="login-password" name="password" type="password"
+                           autocomplete="current-password" required>
+                </div>
+            </div>
+            <button class="btn" type="submit">Entrar</button>
+        </form>
+
+        <form id="form-registro" class="panel" data-panel="registro" novalidate>
+            <h2>Crear cuenta de cliente</h2>
+            <p class="lead">El sistema genera tu usuario y contraseña.</p>
+            <div class="grid">
+                <div class="field">
+                    <label for="reg-nombre">Nombre</label>
+                    <input id="reg-nombre" name="nombre" autocomplete="given-name" maxlength="100" required>
+                </div>
+                <div class="field">
+                    <label for="reg-apellido">Apellidos</label>
+                    <input id="reg-apellido" name="apellido" autocomplete="family-name" maxlength="150" required>
+                </div>
+                <div class="field">
+                    <label for="reg-dni">DNI</label>
+                    <input id="reg-dni" name="dni" placeholder="12345678Z" maxlength="9"
+                           pattern="[0-9]{8}[A-Z]" title="8 números y una letra mayúscula" required>
+                </div>
+                <div class="field">
+                    <label for="reg-telefono">Teléfono</label>
+                    <input id="reg-telefono" name="telefono" type="tel" autocomplete="tel"
+                           maxlength="20" required>
+                </div>
+                <div class="field full">
+                    <label for="reg-email">Email</label>
+                    <input id="reg-email" name="email" type="email" autocomplete="email"
+                           maxlength="100" required>
+                </div>
+                <div class="field full">
+                    <label for="reg-direccion">Dirección</label>
+                    <input id="reg-direccion" name="direccion" autocomplete="street-address"
+                           maxlength="255" required>
+                </div>
+            </div>
+            <button class="btn" type="submit">Crear cuenta</button>
+        </form>
+
+        <section id="panel-exito" class="panel" data-panel="exito">
+            <h2>Cuenta creada</h2>
+            <p class="lead">Guarda estas credenciales: la contraseña no se vuelve a mostrar.</p>
+            <div class="credenciales">
+                <div class="credencial"><span>Usuario</span><code id="exito-username"></code></div>
+                <div class="credencial"><span>Contraseña inicial</span><code id="exito-password"></code></div>
+            </div>
+            <button class="btn" type="button" id="btn-ir-login">Entrar con estas credenciales</button>
+        </section>
+
+    </section>
+</main>
+
+<p class="pie">TechNovaLD · API REST · MySQL</p>
+
+<script type="module" src="js/auth.js"></script>
+</body>
+</html>

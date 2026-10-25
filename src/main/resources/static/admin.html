@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TechNovaLD · Empleados</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <span class="brand__mark" aria-hidden="true">TN</span>
+        <span>TechNovaLD<small>Administración</small></span>
+    </div>
+    <div class="acciones">
+        <span class="topbar__hint">Conectado como <strong data-usuario></strong> · <span data-rol></span></span>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-salir">Cerrar sesión</button>
+    </div>
+</header>
+
+<main class="page">
+    <div class="page__head">
+        <div>
+            <h1>Empleados</h1>
+            <p>Alta y directorio del personal.</p>
+        </div>
+    </div>
+
+    <div id="aviso" class="aviso" role="alert" hidden></div>
+
+    <div class="admin">
+
+        <section class="card" id="card-alta">
+            <div class="panel is-active">
+                <h2>Nuevo empleado</h2>
+                <p class="lead">Las credenciales se generan al guardar.</p>
+
+                <form id="form-empleado" novalidate>
+                    <div class="grid">
+                        <div class="field">
+                            <label for="emp-nombre">Nombre</label>
+                            <input id="emp-nombre" name="nombre" maxlength="100" required>
+                        </div>
+                        <div class="field">
+                            <label for="emp-apellido">Apellidos</label>
+                            <input id="emp-apellido" name="apellido" maxlength="150" required>
+                        </div>
+                        <div class="field">
+                            <label for="emp-dni">DNI</label>
+                            <input id="emp-dni" name="dni" placeholder="87654321X" maxlength="9"
+                                   pattern="[0-9]{8}[A-Z]" title="8 números y una letra mayúscula" required>
+                        </div>
+                        <div class="field">
+                            <label for="emp-telefono">Teléfono</label>
+                            <input id="emp-telefono" name="telefono" type="tel" maxlength="20" required>
+                        </div>
+                        <div class="field full">
+                            <label for="emp-email">Email</label>
+                            <input id="emp-email" name="email" type="email" maxlength="100" required>
+                        </div>
+                        <div class="field full">
+                            <label for="emp-direccion">Dirección</label>
+                            <input id="emp-direccion" name="direccion" maxlength="255" required>
+                        </div>
+                        <div class="field full">
+                            <label for="emp-rol">Rol</label>
+                            <select id="emp-rol" name="rol" required>
+                                <option value="TRABAJADOR" selected>Trabajador</option>
+                                <option value="ADMIN">Administrador</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn" type="submit">Crear empleado</button>
+                </form>
+
+                <div id="exito-empleado" class="bloque-exito" hidden>
+                    <h3>Credenciales generadas</h3>
+                    <div class="credenciales">
+                        <div class="credencial"><span>Usuario</span><code id="empleado-username"></code></div>
+                        <div class="credencial"><span>Contraseña inicial</span><code id="empleado-password"></code></div>
+                    </div>
+                    <p class="hint">Rol: <span id="empleado-rol"></span>. Entrégalas en persona: no se vuelven a mostrar.</p>
+                    <div class="acciones bloque-acciones">
+                        <button type="button" class="btn btn--ghost btn--sm" id="btn-copiar">Copiar credenciales</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" id="card-directorio">
+            <div class="panel is-active">
+                <div class="panel__head">
+                    <h2>Directorio</h2>
+                    <div class="acciones">
+                        <span class="muted" id="contador">—</span>
+                        <button type="button" class="btn btn--ghost btn--sm" id="btn-recargar">Actualizar</button>
+                    </div>
+                </div>
+
+                <div class="tabla-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Empleado</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                        </tr>
+                        </thead>
+                        <tbody id="tabla-empleados"></tbody>
+                    </table>
+                </div>
+
+                <p class="hint tabla-hint">Haz clic en una fila (o pulsa Enter) para ver el detalle.</p>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+<div class="modal" id="modal-empleado" hidden>
+    <div class="modal__backdrop" data-cerrar></div>
+    <div class="modal__caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+        <div class="modal__head">
+            <h2 id="modal-titulo">Empleado</h2>
+            <button type="button" class="modal__cerrar" id="modal-cerrar" aria-label="Cerrar">×</button>
+        </div>
+        <div class="modal__body" id="modal-contenido"></div>
+        <div class="modal__pie">
+            <button type="button" class="btn btn--ghost btn--sm" id="modal-volver">Volver al directorio</button>
+        </div>
+    </div>
+</div>
+
+<p class="pie">TechNovaLD · API REST</p>
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>
