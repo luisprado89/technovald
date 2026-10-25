@@ -1,4 +1,5 @@
 import { api, ApiError, clearSession, getSession } from './api.js';
+import { initCambiarPassword } from './cambiar-password.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
@@ -53,6 +54,8 @@ async function cargarPerfil() {
         $('#form-perfil').hidden = true;
     }
 }
+
+initCambiarPassword();
 
 $('#form-perfil').addEventListener('submit', async (event) => {
     event.preventDefault();

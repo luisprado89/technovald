@@ -357,3 +357,21 @@ tbody tr:hover { background: rgba(255, 255, 255, .03); }
 }
 
 body.sin-scroll { overflow: hidden; }
+
+/* ============ enlaces de texto y ayudas ============ */
+
+.enlace {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.enlace:hover { color: #9fb4ff; }
+
+.centro { margin-top: 14px; text-align: center; }
+
+/* Dentro de un modal el aviso no arrastra los márgenes de la tarjeta */
+.modal .aviso { margin: 0 0 16px; }

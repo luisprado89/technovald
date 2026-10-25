@@ -51,6 +51,9 @@
                 </div>
             </div>
             <button class="btn" type="submit">Entrar</button>
+            <p class="hint centro">
+                <button type="button" class="enlace" id="btn-olvido">¿Olvidaste tu contraseña?</button>
+            </p>
         </form>
 
         <form id="form-registro" class="panel" data-panel="registro" novalidate>
@@ -87,6 +90,22 @@
                 </div>
             </div>
             <button class="btn" type="submit">Crear cuenta</button>
+        </form>
+
+        <form id="form-recuperar" class="panel" data-panel="recuperar" novalidate>
+            <h2>Recuperar contraseña</h2>
+            <p class="lead">Te enviaremos una contraseña temporal al email de tu cuenta.</p>
+            <div class="grid">
+                <div class="field full">
+                    <label for="rec-email">Email</label>
+                    <input id="rec-email" name="email" type="email" autocomplete="email"
+                           maxlength="100" required>
+                </div>
+            </div>
+            <button class="btn" type="submit">Enviar contraseña temporal</button>
+            <p class="hint centro">
+                <button type="button" class="enlace" id="btn-volver-login">Volver al login</button>
+            </p>
         </form>
 
         <section id="panel-exito" class="panel" data-panel="exito">

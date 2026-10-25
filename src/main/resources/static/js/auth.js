@@ -31,9 +31,12 @@ function mensajeDe(error) {
 }
 
 // Los paneles se identifican con data-panel; las pestañas usan el mismo valor.
+// "recuperar" no tiene pestaña propia: mantiene activa la de login.
 function mostrarPanel(nombre) {
+    const pestañaActiva = nombre === 'recuperar' ? 'login' : nombre;
+
     $$('.tab').forEach((tab) => {
-        const activo = tab.dataset.panel === nombre;
+        const activo = tab.dataset.panel === pestañaActiva;
         tab.classList.toggle('is-active', activo);
         tab.setAttribute('aria-selected', String(activo));
     });
@@ -58,6 +61,9 @@ function pintarSesion() {
 $$('.tab').forEach((tab) => {
     tab.addEventListener('click', () => mostrarPanel(tab.dataset.panel));
 });
+
+$('#btn-olvido').addEventListener('click', () => mostrarPanel('recuperar'));
+$('#btn-volver-login').addEventListener('click', () => mostrarPanel('login'));
 
 $('#btn-salir').addEventListener('click', () => {
     clearSession();
@@ -127,6 +133,30 @@ $('#form-registro').addEventListener('submit', async (event) => {
     }
 });
 
+$('#form-recuperar').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formulario = event.currentTarget;
+    if (!formulario.reportValidity()) return;
+
+    const boton = formulario.querySelector('button[type="submit"]');
+    const textoOriginal = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Enviando…';
+    ocultarAviso();
+
+    try {
+        const datos = new FormData(formulario);
+        await api.forgotPassword(datos.get('email').trim().toLowerCase());
+        mostrarAviso('Si el email está registrado, recibirás una contraseña temporal.', 'ok');
+        formulario.reset();
+    } catch (error) {
+        mostrarAviso(mensajeDe(error));
+    } finally {
+        boton.disabled = false;
+        boton.textContent = textoOriginal;
+    }
+});
+
 $('#btn-ir-login').addEventListener('click', () => {
     mostrarPanel('login');
     if (!credencialesCreadas) return;
@@ -137,8 +167,13 @@ $('#btn-ir-login').addEventListener('click', () => {
 
 pintarSesion();
 
-const parametros = new URLSearchParams(window.location.search);
-if (parametros.get('sesion') === 'expirada') {
+const motivo = new URLSearchParams(window.location.search).get('sesion');
+if (motivo === 'expirada') {
     mostrarAviso('Tu sesión ha caducado. Vuelve a entrar.', 'error');
+}
+if (motivo === 'cambiada') {
+    mostrarAviso('Contraseña cambiada. Entra con la nueva.', 'ok');
+}
+if (motivo) {
     window.history.replaceState(null, '', 'index.html');
 }

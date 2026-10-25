@@ -1,4 +1,5 @@
 import { api, ApiError, clearSession, getSession } from './api.js';
+import { initCambiarPassword } from './cambiar-password.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
@@ -178,6 +179,8 @@ async function abrirDetalle(id) {
 }
 
 /* ---------- eventos ---------- */
+
+initCambiarPassword();
 
 $('#emp-dni').addEventListener('input', (event) => {
     event.target.value = event.target.value.toUpperCase();

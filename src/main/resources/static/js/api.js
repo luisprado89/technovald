@@ -96,6 +96,12 @@ export const api = {
     login: (username, password) =>
         request('/auth/login', { method: 'POST', body: { username, password }, conToken: false }),
 
+    forgotPassword: (email) =>
+        request('/auth/forgot-password', { method: 'POST', body: { email }, conToken: false }),
+
+    changePassword: (currentPassword, newPassword) =>
+        request('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
+
     registrarCliente: (datos) =>
         request('/clientes/register', { method: 'POST', body: datos, conToken: false }),
 

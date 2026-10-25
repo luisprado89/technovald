@@ -15,6 +15,7 @@
     </div>
     <div class="acciones">
         <span class="topbar__hint">Conectado como <strong data-usuario></strong> · <span data-rol></span></span>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-cambiar">Cambiar contraseña</button>
         <button type="button" class="btn btn--ghost btn--sm" id="btn-salir">Cerrar sesión</button>
     </div>
 </header>
@@ -132,6 +133,44 @@
         <div class="modal__body" id="modal-contenido"></div>
         <div class="modal__pie">
             <button type="button" class="btn btn--ghost btn--sm" id="modal-volver">Volver al directorio</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="modal-password" hidden>
+    <div class="modal__backdrop" data-cerrar-password></div>
+    <div class="modal__caja" role="dialog" aria-modal="true" aria-labelledby="modal-password-titulo">
+        <div class="modal__head">
+            <h2 id="modal-password-titulo">Cambiar contraseña</h2>
+            <button type="button" class="modal__cerrar" id="modal-password-cerrar" aria-label="Cerrar">×</button>
+        </div>
+        <div class="modal__body">
+            <div id="aviso-password" class="aviso aviso--error" role="alert" hidden></div>
+
+            <form id="form-password" novalidate>
+                <div class="grid">
+                    <div class="field full">
+                        <label for="pass-actual">Contraseña actual</label>
+                        <input id="pass-actual" name="actual" type="password"
+                               autocomplete="current-password" required>
+                    </div>
+                    <div class="field full">
+                        <label for="pass-nueva">Nueva contraseña</label>
+                        <input id="pass-nueva" name="nueva" type="password"
+                               autocomplete="new-password" minlength="8" maxlength="64" required>
+                    </div>
+                    <div class="field full">
+                        <label for="pass-repetir">Repetir nueva contraseña</label>
+                        <input id="pass-repetir" name="repetir" type="password"
+                               autocomplete="new-password" minlength="8" maxlength="64" required>
+                    </div>
+                </div>
+                <p class="hint">Al cambiarla se cierran todas las sesiones abiertas.</p>
+                <div class="acciones bloque-acciones">
+                    <button class="btn" type="submit">Guardar</button>
+                    <button class="btn btn--ghost" type="button" id="modal-password-cancelar">Cancelar</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
