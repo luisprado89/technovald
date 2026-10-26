@@ -1,6 +1,7 @@
 package com.technovald.service.impl;
 
 import com.technovald.dto.request.EmpleadoRegistroRequest;
+import com.technovald.dto.request.EmpleadoUpdateRequest;
 import com.technovald.dto.response.EmpleadoRegistroResponse;
 import com.technovald.dto.response.EmpleadoResponse;
 import com.technovald.entity.Empleado;
@@ -142,4 +143,132 @@ public class EmpleadoServiceImpl implements EmpleadoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Empleado no encontrado con id: " + id));
         return empleadoMapper.toResponse(empleado);
     }
+
+    /**
+     * Actualiza nombre, apellido, email, teléfono, dirección y rol.
+     *
+     * <p>El DNI y el username son inmutables. El rol se actualiza en las tablas
+     * {@code usuario} y {@code empleado} para que no diverjan.</p>
+     */
+    @Override
+    @Transactional
+    public EmpleadoResponse updateEmpleado(Long id, EmpleadoUpdateRequest empleadoUpdateRequest) {
+        Empleado empleado = empleadoPorId(id);
+        Persona persona = empleado.getPersona();
+        Usuario usuario = persona.getUsuario();
+
+        RolUsuario rol = validarRol(empleadoUpdateRequest.getRol());
+        String email = empleadoUpdateRequest.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (!email.equals(persona.getEmail()) && personaRepository.existsByEmail(email)) {
+            throw new BusinessRuleException("Ya existe otra persona registrada con el email indicado");
+        }
+
+        persona.setNombre(empleadoUpdateRequest.getNombre().trim());
+        persona.setApellido(empleadoUpdateRequest.getApellido().trim());
+        persona.setEmail(email);
+        persona.setTelefono(empleadoUpdateRequest.getTelefono().trim());
+        persona.setDireccion(empleadoUpdateRequest.getDireccion().trim());
+        personaRepository.save(persona);
+
+        empleado.setRol(rol);
+        empleadoRepository.save(empleado);
+
+        if (usuario != null) {
+            usuario.setRol(rol);
+            usuarioRepository.save(usuario);
+        }
+
+        log.info("Empleado actualizado: id {} (rol {})", id, rol);
+        return empleadoMapper.toResponse(empleado);
+    }
+
+    /**
+     * Baja lógica: desactiva el perfil y el usuario, impidiendo su login.
+     */
+    @Override
+    @Transactional
+    public void desactivarEmpleado(Long id) {
+        Empleado empleado = empleadoPorId(id);
+        empleado.setActivo(false);
+        empleadoRepository.save(empleado);
+        cambiarActivoUsuario(empleado, false);
+        log.info("Empleado desactivado: id {}", id);
+    }
+
+    /**
+     * Reactiva el perfil y el usuario, permitiendo de nuevo su login.
+     */
+    @Override
+    @Transactional
+    public void reactivarEmpleado(Long id) {
+        Empleado empleado = empleadoPorId(id);
+        empleado.setActivo(true);
+        empleadoRepository.save(empleado);
+        cambiarActivoUsuario(empleado, true);
+        log.info("Empleado reactivado: id {}", id);
+    }
+
+    /**
+     * Genera una contraseña temporal, guarda su hash e invalida los tokens previos.
+     * Devuelve la contraseña en claro para que el ADMIN la entregue.
+     */
+    @Override
+    @Transactional
+    public EmpleadoRegistroResponse resetPassword(Long id) {
+        Empleado empleado = empleadoPorId(id);
+        Persona persona = empleado.getPersona();
+        Usuario usuario = persona.getUsuario();
+
+        if (usuario == null) {
+            throw new BusinessRuleException("El empleado no tiene un usuario de acceso asociado");
+        }
+
+        String passwordTemporal = credentialGenerator.generatePassword();
+        usuario.setPassword(passwordEncoder.encode(passwordTemporal));
+        usuario.invalidateTokens();
+        usuarioRepository.save(usuario);
+
+        log.info("Contraseña reseteada para el empleado '{}' (id {})", usuario.getUsername(), id);
+
+        return EmpleadoRegistroResponse.builder()
+                .id(empleado.getId())
+                .nombre(persona.getNombre())
+                .apellido(persona.getApellido())
+                .username(usuario.getUsername())
+                .passwordInicial(passwordTemporal)
+                .rol(empleado.getRol().name())
+                .build();
+    }
+
+    /**
+     * Busca un empleado por ID sin filtrar por su estado (activo/inactivo).
+     */
+    private Empleado empleadoPorId(Long id) {
+        return empleadoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Empleado no encontrado con id: " + id));
+    }
+
+    /**
+     * Válida que el rol sea ADMIN o TRABAJADOR. CLIENTE es un valor válido del
+     * enum, pero nunca un rol de empleado.
+     */
+    private RolUsuario validarRol(RolUsuario rol) {
+        if (rol != RolUsuario.ADMIN && rol != RolUsuario.TRABAJADOR) {
+            throw new BusinessRuleException("El empleado solo puede tener los roles ADMIN o TRABAJADOR");
+        }
+        return rol;
+    }
+
+    /**
+     * Sincroniza el estado activo/inactivo del usuario asociado al empleado.
+     */
+    private void cambiarActivoUsuario(Empleado empleado, boolean activo) {
+        Usuario usuario = empleado.getPersona().getUsuario();
+        if (usuario != null) {
+            usuario.setActivo(activo);
+            usuarioRepository.save(usuario);
+        }
+    }
+
 }

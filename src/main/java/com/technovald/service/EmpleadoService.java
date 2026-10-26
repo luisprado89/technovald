@@ -1,6 +1,7 @@
 package com.technovald.service;
 
 import com.technovald.dto.request.EmpleadoRegistroRequest;
+import com.technovald.dto.request.EmpleadoUpdateRequest;
 import com.technovald.dto.response.EmpleadoRegistroResponse;
 import com.technovald.dto.response.EmpleadoResponse;
 
@@ -52,4 +53,30 @@ public interface EmpleadoService {
      *         ningún empleado activo con ese id.
      */
     EmpleadoResponse getEmpleadoById(Long id);
+
+    /**
+     * Actualiza nombre, apellido, email, teléfono, dirección y rol.
+     *
+     * @throws com.technovald.exception.ResourceNotFoundException si no existe.
+     * @throws com.technovald.exception.BusinessRuleException si el rol no es
+     *         válido o si el email pertenece a otra persona.
+     */
+    EmpleadoResponse updateEmpleado(Long id, EmpleadoUpdateRequest empleadoUpdateRequest);
+
+    /**
+     * Baja lógica: desactiva el perfil y el usuario, que deja de poder entrar.
+     */
+    void desactivarEmpleado(Long id);
+
+    /**
+     * Reactiva el perfil y el usuario.
+     */
+    void reactivarEmpleado(Long id);
+
+    /**
+     * Genera una contraseña temporal, guarda su hash e invalida los tokens.
+     *
+     * @return las credenciales nuevas para que el administrador las entregue.
+     */
+    EmpleadoRegistroResponse resetPassword(Long id);
 }
