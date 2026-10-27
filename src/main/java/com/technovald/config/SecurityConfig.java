@@ -58,7 +58,7 @@ public class SecurityConfig {
             "http://localhost:4000"     // Servidor Node.js / GraphQL
     );
     private static final List<String> ALLOWED_METHODS =
-            List.of("GET", "POST", "PUT", "DELETE", "OPTIONS");
+            List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 

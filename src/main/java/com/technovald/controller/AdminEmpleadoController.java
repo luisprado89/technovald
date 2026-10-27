@@ -1,18 +1,14 @@
 package com.technovald.controller;
 
 import com.technovald.dto.request.EmpleadoRegistroRequest;
+import com.technovald.dto.request.EmpleadoUpdateRequest;
 import com.technovald.dto.response.EmpleadoRegistroResponse;
 import com.technovald.dto.response.EmpleadoResponse;
 import com.technovald.service.EmpleadoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
@@ -87,5 +83,65 @@ public class AdminEmpleadoController {
     @GetMapping("/{id}")
     public ResponseEntity<EmpleadoResponse> getEmpleadoById(@PathVariable Long id) {
         return ResponseEntity.ok(empleadoService.getEmpleadoById(id));
+    }
+
+    /**
+     * Actualiza los datos editables de un empleado (incluido su rol).
+     *
+     * <p>El DNI y el username no se pueden modificar, ya que identifican a la
+     * persona y a la cuenta de acceso de forma unívoca.</p>
+     *
+     * @param id identificador del empleado.
+     * @param empleadoUpdateRequest nuevos datos a aplicar.
+     * @return los datos actualizados del empleado.
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<EmpleadoResponse> updateEmpleado(
+            @PathVariable Long id,
+            @Valid @RequestBody EmpleadoUpdateRequest empleadoUpdateRequest) {
+
+        return ResponseEntity.ok(empleadoService.updateEmpleado(id, empleadoUpdateRequest));
+    }
+
+    /**
+     * Realiza la baja lógica de un empleado.
+     *
+     * <p>No elimina los datos de la base de datos. Desactiva el perfil y el
+     * usuario para impedir que el empleado pueda iniciar sesión.</p>
+     *
+     * @param id identificador del empleado a desactivar.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> desactivarEmpleado(@PathVariable Long id) {
+        empleadoService.desactivarEmpleado(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Reactiva a un empleado previamente dado de baja.
+     *
+     * <p>Vuelve a habilitar el acceso del usuario, permitiéndole iniciar sesión
+     * de nuevo si dispone de sus credenciales.</p>
+     *
+     * @param id identificador del empleado a reactivar.
+     */
+    @PatchMapping("/{id}/reactivar")
+    public ResponseEntity<Void> reactivarEmpleado(@PathVariable Long id) {
+        empleadoService.reactivarEmpleado(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Resetea la contraseña de un empleado.
+     *
+     * <p>Genera una contraseña temporal aleatoria, invalida los tokens anteriores
+     * e informa al administrador para que se la entregue al empleado.</p>
+     *
+     * @param id identificador del empleado.
+     * @return las nuevas credenciales generadas (username y contraseña temporal).
+     */
+    @PostMapping("/{id}/reset-password")
+    public ResponseEntity<EmpleadoRegistroResponse> resetPassword(@PathVariable Long id) {
+        return ResponseEntity.ok(empleadoService.resetPassword(id));
     }
 }
