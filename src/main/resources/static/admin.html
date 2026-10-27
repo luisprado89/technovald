@@ -24,7 +24,7 @@
     <div class="page__head">
         <div>
             <h1>Empleados</h1>
-            <p>Alta y directorio del personal.</p>
+            <p>Alta, edición y directorio del personal.</p>
         </div>
     </div>
 
@@ -34,8 +34,8 @@
 
         <section class="card" id="card-alta">
             <div class="panel is-active">
-                <h2>Nuevo empleado</h2>
-                <p class="lead">Las credenciales se generan al guardar.</p>
+                <h2 id="form-empleado-titulo">Nuevo empleado</h2>
+                <p class="lead" id="form-empleado-lead">Las credenciales se generan al guardar.</p>
 
                 <form id="form-empleado" novalidate>
                     <div class="grid">
@@ -72,7 +72,11 @@
                             </select>
                         </div>
                     </div>
-                    <button class="btn" type="submit">Crear empleado</button>
+
+                    <div class="acciones bloque-acciones">
+                        <button class="btn" type="submit" id="btn-guardar-empleado">Crear empleado</button>
+                        <button class="btn btn--ghost" type="button" id="btn-cancelar-edicion" hidden>Cancelar edición</button>
+                    </div>
                 </form>
 
                 <div id="exito-empleado" class="bloque-exito" hidden>
@@ -132,7 +136,12 @@
         </div>
         <div class="modal__body" id="modal-contenido"></div>
         <div class="modal__pie">
-            <button type="button" class="btn btn--ghost btn--sm" id="modal-volver">Volver al directorio</button>
+            <div class="acciones">
+                <button type="button" class="btn btn--sm" id="modal-editar">Editar</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="modal-estado">Desactivar</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="modal-reset">Resetear contraseña</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="modal-volver">Volver al directorio</button>
+            </div>
         </div>
     </div>
 </div>

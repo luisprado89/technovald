@@ -1,5 +1,5 @@
 // El frontend lo sirve Spring en el mismo 8080, así que basta la ruta relativa.
-// Si lo sirves desde otro puerto, cambia esto por 'http://localhost:8080/api'.
+// Si se sirve desde otro puerto, cambia esto por 'http://localhost:8080/api'.
 const API_BASE = '/api';
 
 export const CLAVES = {
@@ -116,4 +116,16 @@ export const api = {
 
     crearEmpleado: (datos) =>
         request('/admin/empleados', { method: 'POST', body: datos }),
+
+    actualizarEmpleado: (id, datos) =>
+        request(`/admin/empleados/${id}`, { method: 'PUT', body: datos }),
+
+    desactivarEmpleado: (id) =>
+        request(`/admin/empleados/${id}`, { method: 'DELETE' }),
+
+    reactivarEmpleado: (id) =>
+        request(`/admin/empleados/${id}/reactivar`, { method: 'PATCH' }),
+
+    resetPasswordEmpleado: (id) =>
+        request(`/admin/empleados/${id}/reset-password`, { method: 'POST' }),
 };
