@@ -32,10 +32,10 @@ import java.util.List;
  * cabecera {@code Authorization}. Sin credenciales válidas la respuesta es
  * 401; con credenciales pero sin el rol exigido, 403.</p>
  *
- * <p>La gestión de empleados ({@code /api/admin/empleados/**}) es la primera
- * ruta con regla por rol ({@code ADMIN}); el resto de rutas siguen exigiendo
- * solo autenticación. Las reglas por rol se irán añadiendo aquí a medida que
- * existan nuevos endpoints de administración.</p>
+ * <p>Las rutas de administración exigen roles específicos: los empleados son
+ * exclusivos de {@code ADMIN}, mientras que clientes y la lectura de
+ * categorías están abiertos a {@code ADMIN} y {@code TRABAJADOR}. El resto de
+ * rutas exigen solo autenticación.</p>
  */
 @Configuration
 @EnableWebSecurity
@@ -98,43 +98,38 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        /*
-                         * Rutas públicas: el login, la recuperación de contraseña
-                         * y el registro de clientes.
-                         */
+                        // Rutas públicas
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
                                 "/api/auth/forgot-password",
                                 "/api/clientes/register").permitAll()
 
-                        // Frontend estático: público. La API sigue protegida.
+                        // Frontend estático
                         .requestMatchers("/", "/*.html", "/css/**", "/js/**", "/img/**", "/favicon.ico")
                         .permitAll()
 
-                        /*
-                         * Swagger se abre sin token; el resto de rutas, no.
-                         */
+                        // Swagger
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
-                        /*
-                         * /error es el punto de entrada interno de Spring Boot para
-                         * cualquier error (404, 500...).
-                         */
+                        // Punto de entrada interno de errores de Spring
                         .requestMatchers("/error").permitAll()
 
-                        /*
-                         * Gestión de empleados: es la primera regla por rol de la API.
-                         */
+                        // Gestión de empleados: solo ADMIN
                         .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
-                        /*
-                         * Gestión de clientes por el staff: ADMIN y TRABAJADOR.
-                         * Un CLIENTE autenticado recibe 403.
-                         */
+
+                        // Gestión de clientes: ADMIN y TRABAJADOR
                         .requestMatchers("/api/admin/clientes/**").hasAnyRole("ADMIN", "TRABAJADOR")
 
-                        // Explícito aunque anyRequest() ya lo cubra.
+                        // Categorías: lectura para el staff, escritura solo ADMIN.
+                        // La regla GET va primero porque es la más concreta.
+                        .requestMatchers(HttpMethod.GET, "/api/admin/categorias/**")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers("/api/admin/categorias/**").hasRole("ADMIN")
+
+                        // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
+                        // El resto requiere estar autenticado
                         .anyRequest().authenticated()
                 )
 
