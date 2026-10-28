@@ -126,6 +126,11 @@ public class SecurityConfig {
                          * Gestión de empleados: es la primera regla por rol de la API.
                          */
                         .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
+                        /*
+                         * Gestión de clientes por el staff: ADMIN y TRABAJADOR.
+                         * Un CLIENTE autenticado recibe 403.
+                         */
+                        .requestMatchers("/api/admin/clientes/**").hasAnyRole("ADMIN", "TRABAJADOR")
 
                         // Explícito aunque anyRequest() ya lo cubra.
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
