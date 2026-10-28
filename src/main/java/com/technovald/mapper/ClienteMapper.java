@@ -1,7 +1,9 @@
 package com.technovald.mapper;
 
+import com.technovald.dto.response.ClienteAdminResponse;
 import com.technovald.dto.response.ClienteResponse;
 import com.technovald.entity.Cliente;
+import com.technovald.entity.Usuario;
 import org.springframework.stereotype.Component;
 
 
@@ -36,6 +38,25 @@ public class ClienteMapper {
                 .email(cliente.getPersona().getEmail())
                 .telefono(cliente.getPersona().getTelefono())
                 .direccion(cliente.getPersona().getDireccion())
+                .activo(cliente.getActivo())
+                .build();
+    }
+
+    /**
+     * Ficha para el staff. Añade el username del usuario asociado; el DNI sigue
+     * sin exponerse.
+     */
+    public ClienteAdminResponse toAdminResponse(Cliente cliente) {
+        Usuario usuario = cliente.getPersona().getUsuario();
+
+        return ClienteAdminResponse.builder()
+                .id(cliente.getId())
+                .nombre(cliente.getPersona().getNombre())
+                .apellido(cliente.getPersona().getApellido())
+                .email(cliente.getPersona().getEmail())
+                .telefono(cliente.getPersona().getTelefono())
+                .direccion(cliente.getPersona().getDireccion())
+                .username(usuario == null ? null : usuario.getUsername())
                 .activo(cliente.getActivo())
                 .build();
     }

@@ -1,6 +1,9 @@
 package com.technovald.repository.mysql;
 
 import com.technovald.entity.Cliente;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -33,4 +36,11 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
      * @return el perfil de cliente activo, o vacío si esa persona no tiene.
      */
      Optional<Cliente> findByPersonaIdAndActivoTrue(Long personaId);
+
+    /**
+     * Directorio paginado del staff: todos los clientes, activos e inactivos,
+     * ordenados por id. El {@code @EntityGraph} trae persona y usuario de una vez.
+     */
+    @EntityGraph(attributePaths = {"persona", "persona.usuario"})
+    Page<Cliente> findAllByOrderByIdAsc(Pageable pageable);
 }

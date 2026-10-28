@@ -2,8 +2,11 @@ package com.technovald.service;
 
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
+import com.technovald.dto.response.ClienteAdminResponse;
 import com.technovald.dto.response.ClienteRegistroResponse;
 import com.technovald.dto.response.ClienteResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Operaciones de gestión de clientes.
@@ -54,4 +57,30 @@ public interface ClienteService {
      *         ya pertenece a otra persona.
      */
      ClienteResponse updateMyCliente(String username, ClienteUpdateRequest clienteUpdateRequest);
+
+    /**
+     * Directorio paginado para ADMIN y TRABAJADOR, con activos e inactivos.
+     */
+    Page<ClienteAdminResponse> listarClientes(Pageable pageable);
+
+    /**
+     * Ficha de un cliente, esté activo o no.
+     *
+     * @throws com.technovald.exception.ResourceNotFoundException si no existe.
+     */
+    ClienteAdminResponse obtenerCliente(Long id);
+
+    /**
+     * Edita email, teléfono y dirección.
+     *
+     * @throws com.technovald.exception.BusinessRuleException si el email ya es
+     *         de otra persona.
+     */
+    ClienteAdminResponse actualizarCliente(Long id, ClienteUpdateRequest clienteUpdateRequest);
+
+    /** Baja lógica: desactiva cliente, persona y usuario. */
+    void desactivarCliente(Long id);
+
+    /** Reactiva las tres filas (cliente, persona y usuario). */
+    void reactivarCliente(Long id);
 }
