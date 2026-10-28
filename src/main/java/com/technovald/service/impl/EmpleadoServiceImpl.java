@@ -130,18 +130,16 @@ public class EmpleadoServiceImpl implements EmpleadoService {
     }
 
     /**
-     * Obtiene un empleado activo por su id.
+     * Obtiene un empleado por su id (activo o inactivo).
      *
      * @param id identificador del perfil de empleado.
      * @return el empleado convertido a DTO.
-     * @throws ResourceNotFoundException si no existe o está inactivo.
+     * @throws ResourceNotFoundException si no existe.
      */
     @Override
     @Transactional(readOnly = true)
     public EmpleadoResponse getEmpleadoById(Long id) {
-        Empleado empleado = empleadoRepository.findByIdAndActivoTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Empleado no encontrado con id: " + id));
-        return empleadoMapper.toResponse(empleado);
+        return empleadoMapper.toResponse(empleadoPorId(id));
     }
 
     /**
