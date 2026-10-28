@@ -2,6 +2,7 @@ package com.technovald.service.impl;
 
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
+import com.technovald.dto.response.ClienteAdminResponse;
 import com.technovald.dto.response.ClienteRegistroResponse;
 import com.technovald.dto.response.ClienteResponse;
 import com.technovald.entity.Cliente;
@@ -21,6 +22,8 @@ import com.technovald.security.JwtService;
 import com.technovald.service.ClienteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -153,7 +156,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Override
     @Transactional(readOnly = true)
     public ClienteResponse getMyCliente(String username) {
-        Cliente cliente = clienteDelUsuario(username);
+        Cliente cliente = obtenerClientePorUsername(username);
         return clienteMapper.toResponse(cliente);
     }
 
@@ -175,10 +178,10 @@ public class ClienteServiceImpl implements ClienteService {
      */
     @Override
     @Transactional
-    public ClienteResponse updateMyCliente(String username, ClienteUpdateRequest request) {
-        Cliente cliente = clienteDelUsuario(username);
+    public ClienteResponse updateMyCliente(String username, ClienteUpdateRequest clienteUpdateRequest) {
+        Cliente cliente = obtenerClientePorUsername(username);
         Persona persona = cliente.getPersona();
-        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String email = clienteUpdateRequest.getEmail().trim().toLowerCase(Locale.ROOT);
         /*
          * El email es único en toda la tabla persona. Solo se comprueba si
          * cambia: reenviar el mismo email no puede chocar consigo mismo. La
@@ -188,8 +191,8 @@ public class ClienteServiceImpl implements ClienteService {
             throw new BusinessRuleException("Ya existe otra persona registrada con el email indicado");
         }
         persona.setEmail(email);
-        persona.setTelefono(request.getTelefono().trim());
-        persona.setDireccion(request.getDireccion().trim());
+        persona.setTelefono(clienteUpdateRequest.getTelefono().trim());
+        persona.setDireccion(clienteUpdateRequest.getDireccion().trim());
         personaRepository.save(persona);
         log.info("Datos de contacto actualizados por el cliente '{}' (cliente id {})",
                 username, cliente.getId());
@@ -197,27 +200,111 @@ public class ClienteServiceImpl implements ClienteService {
     }
 
     /**
-     * Resuelve el perfil de cliente activo del usuario autenticado.
+     * Obtiene el perfil del cliente activo a partir del username del usuario autenticado.
      *
-     * <p>
-     * Se recorre la cadena token → usuario → persona → cliente. Si el usuario
-     * es un administrador o un trabajador, la cadena se corta en el último
-     * paso: no tienen fila en {@code cliente}, y eso no es un error del
-     * cliente de la API sino la ausencia del recurso, así que se responde 404
-     * y no 400.
-     * </p>
+     * <p>Se usa para resolver el cliente en los endpoints /me. Si el usuario
+     * autenticado no es un cliente (ej. es un ADMIN), lanza una excepción 404.</p>
      *
-     * @param username username del usuario autenticado.
-     * @return el perfil de cliente activo.
-     * @throws ResourceNotFoundException si el usuario no existe o está
-     *                                   inactivo, o si no tiene perfil.
+     * @param username username del usuario autenticado (extraído del token JWT).
+     * @return la entidad Cliente.
+     * @throws ResourceNotFoundException si el usuario no existe, está inactivo, o no tiene un perfil de cliente activo.
      */
-    private Cliente clienteDelUsuario(String username) {
+    private Cliente obtenerClientePorUsername(String username) {
         Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(username)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Usuario no encontrado o inactivo: " + username));
         return clienteRepository.findByPersonaIdAndActivoTrue(usuario.getPersona().getId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "El usuario autenticado no tiene un perfil de cliente activo"));
+    }
+
+    /**
+     * Devuelve el directorio paginado de clientes (activos e inactivos) para el staff.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ClienteAdminResponse> listarClientes(Pageable pageable) {
+        return clienteRepository.findAllByOrderByIdAsc(pageable)
+                .map(clienteMapper::toAdminResponse);
+    }
+
+    /**
+     * Obtiene la ficha de un cliente por su ID (sin filtrar por estado).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ClienteAdminResponse obtenerCliente(Long id) {
+        return clienteMapper.toAdminResponse(clientePorId(id));
+    }
+
+    /**
+     * Actualiza los datos de contacto de un cliente desde el panel del staff.
+     * El nombre, apellidos y DNI son inmutables.
+     */
+    @Override
+    @Transactional
+    public ClienteAdminResponse actualizarCliente(Long id, ClienteUpdateRequest request) {
+        Cliente cliente = clientePorId(id);
+        Persona persona = cliente.getPersona();
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (!email.equals(persona.getEmail()) && personaRepository.existsByEmail(email)) {
+            throw new BusinessRuleException("Ya existe otra persona registrada con el email indicado");
+        }
+
+        persona.setEmail(email);
+        persona.setTelefono(request.getTelefono().trim());
+        persona.setDireccion(request.getDireccion().trim());
+        personaRepository.save(persona);
+
+        log.info("Datos de contacto actualizados por el staff (cliente id {})", id);
+        return clienteMapper.toAdminResponse(cliente);
+    }
+
+    /**
+     * Baja lógica: desactiva el cliente, la persona y el usuario asociado.
+     */
+    @Override
+    @Transactional
+    public void desactivarCliente(Long id) {
+        cambiarEstadoCliente(clientePorId(id), false);
+        log.info("Cliente desactivado: id {}", id);
+    }
+
+    /**
+     * Reactiva el cliente, la persona y el usuario asociado.
+     */
+    @Override
+    @Transactional
+    public void reactivarCliente(Long id) {
+        cambiarEstadoCliente(clientePorId(id), true);
+        log.info("Cliente reactivado: id {}", id);
+    }
+
+    /**
+     * Busca un cliente por ID sin filtrar por su estado.
+     */
+    private Cliente clientePorId(Long id) {
+        return clienteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado con id: " + id));
+    }
+
+    /**
+     * Sincroniza el estado activo/inactivo en las tres tablas vinculadas
+     * (cliente, persona y usuario) para evitar incoherencias.
+     */
+    private void cambiarEstadoCliente(Cliente cliente, boolean activo) {
+        cliente.setActivo(activo);
+        clienteRepository.save(cliente);
+
+        Persona persona = cliente.getPersona();
+        persona.setActivo(activo);
+        personaRepository.save(persona);
+
+        Usuario usuario = persona.getUsuario();
+        if (usuario != null) {
+            usuario.setActivo(activo);
+            usuarioRepository.save(usuario);
+        }
     }
 }
