@@ -133,6 +133,14 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers("/api/admin/proveedores/**").hasRole("ADMIN")
 
+                         // Inventario: lectura y ajuste de stock para el staff;
+                         // el resto de escrituras, solo ADMIN.
+                        .requestMatchers(HttpMethod.GET, "/api/admin/inventario/**")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/inventario/*/stock")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers("/api/admin/inventario/**").hasRole("ADMIN")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
