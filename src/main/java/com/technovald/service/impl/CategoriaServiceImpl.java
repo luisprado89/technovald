@@ -5,6 +5,7 @@ import com.technovald.dto.response.CategoriaResponse;
 import com.technovald.entity.Categoria;
 import com.technovald.exception.BusinessRuleException;
 import com.technovald.exception.ResourceNotFoundException;
+import com.technovald.mapper.CategoriaMapper;
 import com.technovald.repository.mysql.CategoriaRepository;
 import com.technovald.service.CategoriaService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.List;
 public class CategoriaServiceImpl implements CategoriaService {
 
     private final CategoriaRepository categoriaRepository;
+    private final CategoriaMapper categoriaMapper;
 
     /**
      * Devuelve el listado completo de categorías (activas e inactivas) ordenadas por nombre.
@@ -28,9 +30,7 @@ public class CategoriaServiceImpl implements CategoriaService {
     @Override
     @Transactional(readOnly = true)
     public List<CategoriaResponse> listarCategorias() {
-        return categoriaRepository.findAllByOrderByNombreAsc().stream()
-                .map(this::toResponse)
-                .toList();
+        return categoriaMapper.toResponseList(categoriaRepository.findAllByOrderByNombreAsc());
     }
 
     /**
@@ -55,7 +55,7 @@ public class CategoriaServiceImpl implements CategoriaService {
         categoriaRepository.save(categoria);
 
         log.info("Categoría creada: '{}' (id {})", nombre, categoria.getId());
-        return toResponse(categoria);
+        return categoriaMapper.toResponse(categoria);
     }
 
     /**
@@ -66,20 +66,20 @@ public class CategoriaServiceImpl implements CategoriaService {
      */
     @Override
     @Transactional
-    public CategoriaResponse actualizarCategoria(Long id, CategoriaRequest request) {
+    public CategoriaResponse actualizarCategoria(Long id, CategoriaRequest categoriaRequest) {
         Categoria categoria = categoriaPorId(id);
-        String nombre = request.getNombre().trim();
+        String nombre = categoriaRequest.getNombre().trim();
 
         if (categoriaRepository.existsByNombreIgnoreCaseAndIdNot(nombre, id)) {
             throw new BusinessRuleException("Ya existe una categoría con ese nombre");
         }
 
         categoria.setNombre(nombre);
-        categoria.setDescripcion(textoOpcional(request.getDescripcion()));
+        categoria.setDescripcion(textoOpcional(categoriaRequest.getDescripcion()));
         categoriaRepository.save(categoria);
 
         log.info("Categoría actualizada: '{}' (id {})", nombre, id);
-        return toResponse(categoria);
+        return categoriaMapper.toResponse(categoria);
     }
 
     /**
@@ -120,17 +120,5 @@ public class CategoriaServiceImpl implements CategoriaService {
      */
     private String textoOpcional(String valor) {
         return valor == null || valor.isBlank() ? null : valor.trim();
-    }
-
-    /**
-     * Mapea una entidad Categoria a su DTO de respuesta.
-     */
-    private CategoriaResponse toResponse(Categoria categoria) {
-        return CategoriaResponse.builder()
-                .id(categoria.getId())
-                .nombre(categoria.getNombre())
-                .descripcion(categoria.getDescripcion())
-                .activo(categoria.getActivo())
-                .build();
     }
 }

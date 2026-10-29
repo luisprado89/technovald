@@ -36,7 +36,7 @@ public class AdminCategoriaController {
      * @return lista de categorías ordenadas por nombre.
      */
     @GetMapping
-    public ResponseEntity<List<CategoriaResponse>> listar() {
+    public ResponseEntity<List<CategoriaResponse>> listarCategorias() {
         return ResponseEntity.ok(categoriaService.listarCategorias());
     }
 
@@ -46,28 +46,28 @@ public class AdminCategoriaController {
      * <p>Responde {@code 201 Created} sin cabecera {@code Location} porque no
      * existe un endpoint de consulta individual por ID.</p>
      *
-     * @param request datos de la nueva categoría.
+     * @param categoriaRequest datos de la nueva categoría.
      * @return la categoría creada.
      */
     @PostMapping
-    public ResponseEntity<CategoriaResponse> crear(@Valid @RequestBody CategoriaRequest request) {
+    public ResponseEntity<CategoriaResponse> crearCategoria(@Valid @RequestBody CategoriaRequest categoriaRequest) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(categoriaService.crearCategoria(request));
+                .body(categoriaService.crearCategoria(categoriaRequest));
     }
 
     /**
      * Actualiza el nombre y la descripción de una categoría existente.
      *
      * @param id identificador de la categoría.
-     * @param request nuevos datos de la categoría.
+     * @param categoriaRequest nuevos datos de la categoría.
      * @return la categoría actualizada.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<CategoriaResponse> actualizar(
+    public ResponseEntity<CategoriaResponse> actualizarCategoria(
             @PathVariable Long id,
-            @Valid @RequestBody CategoriaRequest request) {
+            @Valid @RequestBody CategoriaRequest categoriaRequest) {
 
-        return ResponseEntity.ok(categoriaService.actualizarCategoria(id, request));
+        return ResponseEntity.ok(categoriaService.actualizarCategoria(id, categoriaRequest));
     }
 
     /**
@@ -76,7 +76,7 @@ public class AdminCategoriaController {
      * @param id identificador de la categoría a desactivar.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> desactivar(@PathVariable Long id) {
+    public ResponseEntity<Void> desactivarCategoria(@PathVariable Long id) {
         categoriaService.desactivarCategoria(id);
         return ResponseEntity.noContent().build();
     }
@@ -87,7 +87,7 @@ public class AdminCategoriaController {
      * @param id identificador de la categoría a reactivar.
      */
     @PatchMapping("/{id}/reactivar")
-    public ResponseEntity<Void> reactivar(@PathVariable Long id) {
+    public ResponseEntity<Void> reactivarCategoria(@PathVariable Long id) {
         categoriaService.reactivarCategoria(id);
         return ResponseEntity.noContent().build();
     }
