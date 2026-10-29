@@ -59,6 +59,12 @@ public class Proveedor {
     private String nombreEmpresa;
 
     /**
+     * CIF de la empresa. Único; el servicio lo normaliza a mayúsculas.
+     */
+    @Column(name = "cif", unique = true, length = 20)
+    private String cif;
+
+    /**
      * Nombre de la persona de contacto en la empresa proveedora.
      */
     @Column(name = "contacto", nullable = false)
