@@ -126,6 +126,13 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers("/api/admin/categorias/**").hasRole("ADMIN")
 
+
+                        // Proveedores: lectura para el staff, escritura solo ADMIN.
+                        // La regla GET va primero porque es la más concreta.
+                        .requestMatchers(HttpMethod.GET, "/api/admin/proveedores/**")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers("/api/admin/proveedores/**").hasRole("ADMIN")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
