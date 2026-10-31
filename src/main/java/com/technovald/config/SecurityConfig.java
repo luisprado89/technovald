@@ -33,9 +33,9 @@ import java.util.List;
  * 401; con credenciales pero sin el rol exigido, 403.</p>
  *
  * <p>Las rutas de administración exigen roles específicos: los empleados son
- * exclusivos de {@code ADMIN}, mientras que clientes y la lectura de
- * categorías están abiertos a {@code ADMIN} y {@code TRABAJADOR}. El resto de
- * rutas exigen solo autenticación.</p>
+ * exclusivos de {@code ADMIN}, mientras que clientes, categorías, proveedores e
+ * inventario están abiertos a {@code ADMIN} y {@code TRABAJADOR}. El catálogo
+ * público es accesible sin token.</p>
  */
 @Configuration
 @EnableWebSecurity
@@ -98,11 +98,14 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        // Rutas públicas
+                        // Rutas públicas (login, recuperación, registro)
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
                                 "/api/auth/forgot-password",
                                 "/api/clientes/register").permitAll()
+
+                        // Catálogo público: se consulta sin token
+                        .requestMatchers(HttpMethod.GET, "/api/catalogo/**").permitAll()
 
                         // Frontend estático
                         .requestMatchers("/", "/*.html", "/css/**", "/js/**", "/img/**", "/favicon.ico")
@@ -120,26 +123,25 @@ public class SecurityConfig {
                         // Gestión de clientes: ADMIN y TRABAJADOR
                         .requestMatchers("/api/admin/clientes/**").hasAnyRole("ADMIN", "TRABAJADOR")
 
-                        // Categorías: lectura para el staff, escritura solo ADMIN.
-                        // La regla GET va primero porque es la más concreta.
+                        // Categorías: lectura para el staff, escritura solo ADMIN
                         .requestMatchers(HttpMethod.GET, "/api/admin/categorias/**")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers("/api/admin/categorias/**").hasRole("ADMIN")
 
-
-                        // Proveedores: lectura para el staff, escritura solo ADMIN.
-                        // La regla GET va primero porque es la más concreta.
+                        // Proveedores: lectura para el staff, escritura solo ADMIN
                         .requestMatchers(HttpMethod.GET, "/api/admin/proveedores/**")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers("/api/admin/proveedores/**").hasRole("ADMIN")
 
-                         // Inventario: lectura y ajuste de stock para el staff;
-                         // el resto de escrituras, solo ADMIN.
+                        // Inventario: lectura y ajuste de stock para el staff; el resto solo ADMIN
                         .requestMatchers(HttpMethod.GET, "/api/admin/inventario/**")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers(HttpMethod.PATCH, "/api/admin/inventario/*/stock")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
                         .requestMatchers("/api/admin/inventario/**").hasRole("ADMIN")
+
+                        // Gestión del catálogo (fichas técnicas): solo ADMIN
+                        .requestMatchers("/api/admin/catalogo/**").hasRole("ADMIN")
 
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()

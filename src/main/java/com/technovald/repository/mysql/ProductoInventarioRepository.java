@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /** Repositorio JPA para {@link ProductoInventario}. */
 @Repository
@@ -30,4 +32,11 @@ public interface ProductoInventarioRepository extends JpaRepository<ProductoInve
 
     /** Comprueba si el EAN pertenece a otro producto distinto (para la edición). */
     boolean existsByEanIgnoreCaseAndIdNot(String ean, Long id);
+
+    /** Busca un producto del inventario por su EAN. */
+    Optional<ProductoInventario> findByEanIgnoreCase(String ean);
+
+    /** Busca una lista de productos por sus EANs (para enriquecer el catálogo). */
+    List<ProductoInventario> findAllByEanIn(Collection<String> eans);
+
 }

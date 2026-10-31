@@ -1,7 +1,10 @@
 package com.technovald.controller;
 
 import com.technovald.dto.request.CategoriaRequest;
+import com.technovald.dto.request.ProductoCatalogoRequest;
 import com.technovald.dto.response.CategoriaResponse;
+import com.technovald.dto.response.ProductoCatalogoResponse;
+import com.technovald.service.CatalogoService;
 import com.technovald.service.CategoriaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +32,7 @@ import java.util.List;
 public class AdminCategoriaController {
 
     private final CategoriaService categoriaService;
+    private final CatalogoService catalogoService;
 
     /**
      * Devuelve la lista completa de categorías (activas e inactivas).
@@ -90,5 +94,20 @@ public class AdminCategoriaController {
     public ResponseEntity<Void> reactivarCategoria(@PathVariable Long id) {
         categoriaService.reactivarCategoria(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Crea o actualiza una ficha de catálogo.
+     *
+     * <p>Si ya existe una ficha con el mismo EAN, se actualiza; si no, se crea.</p>
+     *
+     * @param productoCatalogoRequest datos de la ficha.
+     * @return la ficha guardada.
+     */
+    @PostMapping
+    public ResponseEntity<ProductoCatalogoResponse> guardarProductoCatalogo(
+            @Valid @RequestBody ProductoCatalogoRequest productoCatalogoRequest) {
+
+        return ResponseEntity.ok(catalogoService.guardarProductoCatalogo(productoCatalogoRequest));
     }
 }
