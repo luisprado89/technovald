@@ -184,6 +184,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Fallo externo de Icecat: no es culpa del cliente ni un 500 propio.
+     * Se devuelve 503 con el mensaje de la excepción.
+     */
+    @ExceptionHandler(IcecatApiException.class)
+    public ResponseEntity<ErrorResponse> handleIcecat(IcecatApiException e,
+                                                      HttpServletRequest request) {
+
+        log.warn("Fallo al consultar Icecat (503) en {}: {}", request.getRequestURI(), e.getMessage());
+
+        return build(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), request);
+    }
+
+    /**
      * Último recurso: captura cualquier excepción no traducida antes.
      *
      * <p>
