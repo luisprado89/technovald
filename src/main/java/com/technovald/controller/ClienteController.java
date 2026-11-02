@@ -54,16 +54,16 @@ public class ClienteController {
      * apuntar a una ruta que responde 404 sería peor que no apuntar a ninguna.
      * </p>
      *
-     * @param request datos personales del cliente.
+     * @param clienteRegistroRequest datos personales del cliente.
      * @return las credenciales generadas y el token del cliente creado.
      */
     @PostMapping("/register")
-    public ResponseEntity<ClienteRegistroResponse> register(
-            @Valid @RequestBody ClienteRegistroRequest request) {
+    public ResponseEntity<ClienteRegistroResponse> registerCliente(
+            @Valid @RequestBody ClienteRegistroRequest clienteRegistroRequest) {
 
-        ClienteRegistroResponse response = clienteService.registerCliente(request);
+        ClienteRegistroResponse clienteRegistroResponse = clienteService.registerCliente(clienteRegistroRequest);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(clienteRegistroResponse);
     }
 
     /**
@@ -94,15 +94,15 @@ public class ClienteController {
      * </p>
      *
      * @param userDetails usuario autenticado, con el username del token.
-     * @param request     datos de contacto nuevos.
+     * @param clienteUpdateRequest     datos de contacto nuevos.
      * @return los datos del perfil ya actualizados.
      */
     @PutMapping("/me")
     public ResponseEntity<ClienteResponse> updateMyCliente(
             @AuthenticationPrincipal UserDetails userDetails,
-            @Valid @RequestBody ClienteUpdateRequest request) {
+            @Valid @RequestBody ClienteUpdateRequest clienteUpdateRequest) {
 
         return ResponseEntity.ok(
-                clienteService.updateMyCliente(userDetails.getUsername(), request));
+                clienteService.updateMyCliente(userDetails.getUsername(), clienteUpdateRequest));
     }
 }

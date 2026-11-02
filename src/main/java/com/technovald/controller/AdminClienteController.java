@@ -41,7 +41,7 @@ public class AdminClienteController {
      * @return página de clientes con metadatos de paginación.
      */
     @GetMapping
-    public ResponseEntity<PaginaResponse<ClienteAdminResponse>> listar(
+    public ResponseEntity<PaginaResponse<ClienteAdminResponse>> listarClientes(
             @PageableDefault(size = 10) Pageable pageable) {
 
         return ResponseEntity.ok(PaginaResponse.de(clienteService.listarClientes(pageable)));
@@ -54,7 +54,7 @@ public class AdminClienteController {
      * @return los datos del cliente.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<ClienteAdminResponse> detalle(@PathVariable Long id) {
+    public ResponseEntity<ClienteAdminResponse> obtenerCliente(@PathVariable Long id) {
         return ResponseEntity.ok(clienteService.obtenerCliente(id));
     }
 
@@ -68,7 +68,7 @@ public class AdminClienteController {
      * @return los datos del cliente actualizados.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<ClienteAdminResponse> actualizar(
+    public ResponseEntity<ClienteAdminResponse> actualizarCliente(
             @PathVariable Long id,
             @Valid @RequestBody ClienteUpdateRequest clienteUpdateRequest) {
 
@@ -83,7 +83,7 @@ public class AdminClienteController {
      * @param id identificador del cliente a desactivar.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> desactivar(@PathVariable Long id) {
+    public ResponseEntity<Void> desactivarCliente(@PathVariable Long id) {
         clienteService.desactivarCliente(id);
         return ResponseEntity.noContent().build();
     }
@@ -94,7 +94,7 @@ public class AdminClienteController {
      * @param id identificador del cliente a reactivar.
      */
     @PatchMapping("/{id}/reactivar")
-    public ResponseEntity<Void> reactivar(@PathVariable Long id) {
+    public ResponseEntity<Void> reactivarCliente(@PathVariable Long id) {
         clienteService.reactivarCliente(id);
         return ResponseEntity.noContent().build();
     }

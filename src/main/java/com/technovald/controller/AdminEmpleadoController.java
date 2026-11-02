@@ -56,12 +56,12 @@ public class AdminEmpleadoController {
     public ResponseEntity<EmpleadoRegistroResponse> createEmpleado(
             @Valid @RequestBody EmpleadoRegistroRequest empleadoRegistroRequest) {
 
-        EmpleadoRegistroResponse response =
+        EmpleadoRegistroResponse empleadoRegistroResponse =
                 empleadoService.createEmpleado(empleadoRegistroRequest);
 
         return ResponseEntity
-                .created(URI.create("/api/admin/empleados/" + response.getId()))
-                .body(response);
+                .created(URI.create("/api/admin/empleados/" + empleadoRegistroResponse.getId()))
+                .body(empleadoRegistroResponse);
     }
 
     /**

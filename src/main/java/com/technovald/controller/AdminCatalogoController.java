@@ -35,14 +35,14 @@ public class AdminCatalogoController {
     /**
      * Crea o actualiza una ficha de catálogo sin pasar por Icecat.
      *
-     * @param request datos de la ficha; el EAN identifica el documento.
+     * @param productoCatalogoRequest datos de la ficha; el EAN identifica el documento.
      * @return la ficha guardada, con precio y stock del inventario.
      */
     @PostMapping
-    public ResponseEntity<ProductoCatalogoResponse> guardar(
-            @Valid @RequestBody ProductoCatalogoRequest request) {
+    public ResponseEntity<ProductoCatalogoResponse> guardarProductoCatalogo(
+            @Valid @RequestBody ProductoCatalogoRequest productoCatalogoRequest) {
 
-        return ResponseEntity.ok(catalogoService.guardarProductoCatalogo(request));
+        return ResponseEntity.ok(catalogoService.guardarProductoCatalogo(productoCatalogoRequest));
     }
 
     /**
@@ -52,7 +52,7 @@ public class AdminCatalogoController {
      * @return la ficha guardada, con precio y stock del inventario.
      */
     @PostMapping("/sync/{ean}")
-    public ResponseEntity<ProductoCatalogoResponse> sincronizar(@PathVariable String ean) {
+    public ResponseEntity<ProductoCatalogoResponse> sincronizarProducto(@PathVariable String ean) {
         return ResponseEntity.ok(icecatService.sincronizarProducto(ean));
     }
 

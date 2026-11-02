@@ -36,7 +36,7 @@ public class AdminProveedorController {
      * @return lista completa de proveedores.
      */
     @GetMapping
-    public ResponseEntity<List<ProveedorResponse>> listar() {
+    public ResponseEntity<List<ProveedorResponse>> listarProveedores() {
         return ResponseEntity.ok(proveedorService.listarProveedores());
     }
 

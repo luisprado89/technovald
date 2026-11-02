@@ -44,12 +44,12 @@ public class AuthController {
     /**
      * Inicia sesión y devuelve el token.
      *
-     * @param request credenciales del usuario.
+     * @param loginRequest credenciales del usuario.
      * @return el token y los datos del usuario autenticado.
      */
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        return ResponseEntity.ok(authService.login(loginRequest));
     }
 
     /**
