@@ -3,7 +3,9 @@ package com.technovald.repository.mysql;
 import com.technovald.entity.ProductoInventario;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -38,5 +40,20 @@ public interface ProductoInventarioRepository extends JpaRepository<ProductoInve
 
     /** Busca una lista de productos por sus EANs (para enriquecer el catálogo). */
     List<ProductoInventario> findAllByEanIn(Collection<String> eans);
+
+    /** Busca un producto activo por id (para crear pedidos). */
+    Optional<ProductoInventario> findByIdAndActivoTrue(Long id);
+
+    /**
+     * Descuenta stock en una sola sentencia. Devuelve 0 si no hay stock
+     * suficiente o el producto está inactivo.
+     */
+    @Modifying
+    @Query("""
+            update ProductoInventario p
+            set p.stockActual = p.stockActual - :cantidad
+            where p.id = :id and p.activo = true and p.stockActual >= :cantidad
+            """)
+    int decrementarStockAtomico(@Param("id") Long id, @Param("cantidad") Integer cantidad);
 
 }
