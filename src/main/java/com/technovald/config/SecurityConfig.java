@@ -143,6 +143,14 @@ public class SecurityConfig {
                         // Gestión del catálogo (fichas técnicas): solo ADMIN
                         .requestMatchers("/api/admin/catalogo/**").hasRole("ADMIN")
 
+                        // Pedidos: el cliente compra y consulta los suyos; el staff gestiona
+                        .requestMatchers(HttpMethod.POST, "/api/pedidos").hasRole("CLIENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/pedidos/me").hasRole("CLIENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/pedidos")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers(HttpMethod.PUT, "/api/pedidos/*/estado")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
