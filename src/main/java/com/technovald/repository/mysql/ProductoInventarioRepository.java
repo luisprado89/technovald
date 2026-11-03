@@ -56,4 +56,6 @@ public interface ProductoInventarioRepository extends JpaRepository<ProductoInve
             """)
     int decrementarStockAtomico(@Param("id") Long id, @Param("cantidad") Integer cantidad);
 
+    /** Productos activos por lista de EAN (para resolver la bandeja de reseñas). */
+    List<ProductoInventario> findAllByEanInAndActivoTrue(Collection<String> eans);
 }
