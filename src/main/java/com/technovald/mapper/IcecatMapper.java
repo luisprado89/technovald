@@ -1,5 +1,8 @@
 package com.technovald.mapper;
 
+import com.technovald.document.EspecificacionGrupo;
+import com.technovald.document.EspecificacionItem;
+import com.technovald.document.Imagen;
 import com.technovald.document.ProductoDocumento;
 import com.technovald.dto.icecat.IcecatFeature;
 import com.technovald.dto.icecat.IcecatFeaturesGroups;
@@ -9,18 +12,15 @@ import com.technovald.dto.icecat.IcecatResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Convierte la respuesta de Icecat en la ficha plana de MongoDB.
+ * Convierte la respuesta de Icecat en la ficha de MongoDB.
  *
  * <p>
- * Solo traslada lo que el documento guarda: nombre, marca, categoría,
- * descripción, URLs de imágenes y especificaciones aplanadas. El EAN es
- * siempre el solicitado, no el que devuelva Icecat, porque es el puente con
- * el inventario.
+ * El EAN es siempre el solicitado. Las especificaciones se guardan agrupadas y
+ * las imágenes con sus dos resoluciones; la descripción larga usa el resumen de
+ * Icecat cuando {@code LongDesc} viene vacío.
  * </p>
  */
 @Component
@@ -29,32 +29,44 @@ public class IcecatMapper {
     /**
      * Construye o actualiza el documento a partir de la respuesta de Icecat.
      *
-     * @param response respuesta de Icecat ya validada por el cliente.
-     * @param ean      EAN solicitado; se impone sobre el de Icecat.
-     * @param existente documento previo si la ficha ya existía; puede ser null.
-     * @return el documento listo para guardar, sin fechas: las pone el servicio.
+     * @param response respuesta de Icecat ya validada.
+     * @param ean      EAN solicitado.
+     * @param existente documento previo, o null si es nuevo.
+     * @return el documento listo para guardar, sin fecha de sincronización.
      */
     public ProductoDocumento toDocumento(IcecatResponse response, String ean, ProductoDocumento existente) {
         ProductoDocumento documento = existente != null ? existente : new ProductoDocumento();
         IcecatGeneralInfo info = response.getData().getGeneralInfo();
 
         documento.setEan(ean);
-        documento.setNombre(texto(info != null ? info.getTitle() : null));
+        documento.setTitulo(texto(info != null ? info.getTitle() : null));
+        documento.setNombreCorto(nombreCorto(info));
         documento.setMarca(texto(info != null ? info.getBrand() : null));
         documento.setCategoria(categoria(info));
-        documento.setDescripcionLarga(descripcion(info));
+        documento.setDescripcionCorta(descripcionCorta(info));
+        documento.setDescripcionLarga(descripcionLarga(info));
         documento.setImagenes(imagenes(response.getData().getGallery()));
         documento.setEspecificaciones(especificaciones(response.getData().getFeaturesGroups()));
 
         return documento;
     }
 
-    /**
-     * Extrae {@code Category.Name.Value}.
-     *
-     * @param info datos generales; puede ser null.
-     * @return el nombre de la categoría, o null si no viene.
-     */
+    /** Nombre corto: ProductIntName → ProductName → Title. */
+    private String nombreCorto(IcecatGeneralInfo info) {
+        if (info == null) {
+            return null;
+        }
+        if (info.getProductNameInfo() != null) {
+            String corto = texto(info.getProductNameInfo().getProductIntName());
+            if (corto != null) {
+                return corto;
+            }
+        }
+        String nombre = texto(info.getProductName());
+        return nombre != null ? nombre : texto(info.getTitle());
+    }
+
+    /** Categoría: Category.Name.Value. */
     private String categoria(IcecatGeneralInfo info) {
         if (info == null || info.getCategory() == null || info.getCategory().getName() == null) {
             return null;
@@ -62,87 +74,103 @@ public class IcecatMapper {
         return texto(info.getCategory().getName().getValue());
     }
 
-    /**
-     * Extrae {@code Description.LongDesc}.
-     *
-     * @param info datos generales; puede ser null.
-     * @return la descripción HTML, o null si no viene.
-     */
-    private String descripcion(IcecatGeneralInfo info) {
-        if (info == null || info.getDescription() == null) {
+    /** Descripción corta: ShortSummaryDescription. */
+    private String descripcionCorta(IcecatGeneralInfo info) {
+        if (info == null || info.getSummaryDescription() == null) {
             return null;
         }
-        return texto(info.getDescription().getLongDesc());
+        return texto(info.getSummaryDescription().getShortSummaryDescription());
     }
 
     /**
-     * Convierte la galería en una lista de URLs, con la imagen principal
-     * primero. Si una imagen no trae {@code Pic}, se usa {@code Pic500x500}.
-     *
-     * @param galeria imágenes de Icecat; puede ser null.
-     * @return las URLs, sin huecos ni nulos.
+     * Descripción larga: LongDesc → LongSummaryDescription → ShortSummaryDescription.
      */
-    private List<String> imagenes(List<IcecatGallery> galeria) {
+    private String descripcionLarga(IcecatGeneralInfo info) {
+        if (info == null) {
+            return null;
+        }
+        if (info.getDescription() != null) {
+            String larga = texto(info.getDescription().getLongDesc());
+            if (larga != null) {
+                return larga;
+            }
+        }
+        if (info.getSummaryDescription() != null) {
+            String larga = texto(info.getSummaryDescription().getLongSummaryDescription());
+            if (larga != null) {
+                return larga;
+            }
+            return texto(info.getSummaryDescription().getShortSummaryDescription());
+        }
+        return null;
+    }
+
+    /** Galería con alta, media y principal; si ninguna es principal, la primera. */
+    private List<Imagen> imagenes(List<IcecatGallery> galeria) {
         if (galeria == null) {
             return List.of();
         }
 
-        List<String> principales = new ArrayList<>();
-        List<String> resto = new ArrayList<>();
-
+        List<Imagen> resultado = new ArrayList<>();
         for (IcecatGallery imagen : galeria) {
-            String url = texto(imagen.getPic()) != null ? imagen.getPic() : imagen.getPic500x500();
-            if (texto(url) == null) {
+            String alta = texto(imagen.getPic()) != null ? imagen.getPic().trim() : null;
+            String media = texto(imagen.getPic500x500()) != null ? imagen.getPic500x500().trim() : null;
+
+            if (alta == null && media == null) {
                 continue;
             }
-            if ("Y".equalsIgnoreCase(imagen.getIsMain())) {
-                principales.add(url.trim());
-            } else {
-                resto.add(url.trim());
-            }
+            resultado.add(Imagen.builder()
+                    .urlAlta(alta != null ? alta : media)
+                    .urlMedia(media)
+                    .esPrincipal("Y".equalsIgnoreCase(imagen.getIsMain()))
+                    .build());
         }
 
-        principales.addAll(resto);
-        return principales;
+        if (!resultado.isEmpty() && resultado.stream().noneMatch(Imagen::isEsPrincipal)) {
+            resultado.get(0).setEsPrincipal(true);
+        }
+        return resultado;
     }
 
-    /**
-     * Aplana los grupos en un mapa nombre → valor. Si dos grupos repiten la
-     * misma clave, se queda la última.
-     *
-     * @param grupos grupos de especificaciones; puede ser null.
-     * @return el mapa de especificaciones, en el orden en que llegan.
-     */
-    private Map<String, String> especificaciones(List<IcecatFeaturesGroups> grupos) {
-        Map<String, String> especificaciones = new LinkedHashMap<>();
+    /** Grupos de especificaciones con sus items. */
+    private List<EspecificacionGrupo> especificaciones(List<IcecatFeaturesGroups> grupos) {
+        List<EspecificacionGrupo> resultado = new ArrayList<>();
         if (grupos == null) {
-            return especificaciones;
+            return resultado;
         }
 
         for (IcecatFeaturesGroups grupo : grupos) {
-            if (grupo.getFeatures() == null) {
-                continue;
-            }
-            for (IcecatFeature feature : grupo.getFeatures()) {
-                String nombre = feature.getFeature() != null && feature.getFeature().getName() != null
-                        ? texto(feature.getFeature().getName().getValue())
-                        : null;
-                String valor = texto(feature.getPresentationValue());
-                if (nombre != null && valor != null) {
-                    especificaciones.put(nombre, valor);
+            List<EspecificacionItem> items = new ArrayList<>();
+
+            if (grupo.getFeatures() != null) {
+                for (IcecatFeature feature : grupo.getFeatures()) {
+                    String nombre = feature.getFeature() != null && feature.getFeature().getName() != null
+                            ? texto(feature.getFeature().getName().getValue())
+                            : null;
+                    String valor = texto(feature.getPresentationValue());
+
+                    if (nombre != null && valor != null) {
+                        items.add(EspecificacionItem.builder().nombre(nombre).valor(valor).build());
+                    }
                 }
+            }
+
+            String nombreGrupo = grupo.getFeatureGroup() != null && grupo.getFeatureGroup().getName() != null
+                    ? texto(grupo.getFeatureGroup().getName().getValue())
+                    : null;
+
+            if (!items.isEmpty()) {
+                resultado.add(EspecificacionGrupo.builder()
+                        .grupo(nombreGrupo != null ? nombreGrupo : "Especificaciones")
+                        .items(items)
+                        .build());
             }
         }
 
-        return especificaciones;
+        return resultado;
     }
 
-    /**
-     * Recorta un texto y convierte los vacíos en null.
-     *
-     * @param valor texto original; puede ser null.
-     * @return el texto limpio, o null si quedaba vacío.
-     */
+    /** Recorta y convierte vacíos en null. */
     private String texto(String valor) {
         return valor == null || valor.isBlank() ? null : valor.trim();
     }

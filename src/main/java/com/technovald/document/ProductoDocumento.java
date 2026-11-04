@@ -7,13 +7,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Documento de MongoDB que representa la ficha pública de un producto en el catálogo.
- * Se enlaza con la tabla de inventario de MySQL mediante el EAN.
+ * Ficha pública de un producto en MongoDB. Se enlaza con el inventario de
+ * MySQL mediante el EAN.
  */
 @Document(collection = "productos")
 @Getter @Setter
@@ -21,43 +19,48 @@ import java.util.Map;
 @Builder
 public class ProductoDocumento {
 
-    /**
-     * Identificador único autogenerado por MongoDB.
-     * <p>
-     * Se genera automáticamente como un
-     * {@code ObjectId} al persistir el documento.
-     * </p>
-     * */
+    /** Identificador único autogenerado por MongoDB. */
     @Id
     private String id;
 
-    /** Código de barras EAN. Actúa como puente con la tabla de inventario (MySQL). */
+    /** Código de barras EAN; puente con el inventario. */
     @Indexed(unique = true)
     private String ean;
 
-    /** Nombre comercial del producto. */
-    private String nombre;
+    /** Título largo de Icecat, para el detalle. */
+    private String titulo;
 
-    /** Descripción detallada para la ficha pública. */
-    private String descripcionLarga;
+    /** Nombre corto, para las tarjetas del catálogo. */
+    private String nombreCorto;
 
     /** Marca del producto. */
     private String marca;
 
-    /** Categoría (texto libre para el catálogo). */
+    /** Categoría (texto libre). */
     private String categoria;
 
-    /** Lista de URLs de imágenes del producto. */
+    /** Descripción de una línea, para la tarjeta. */
+    private String descripcionCorta;
+
+    /** Descripción larga, para el detalle. */
+    private String descripcionLarga;
+
+    /** Galería de imágenes. */
     @Builder.Default
-    private List<String> imagenes = new ArrayList<>();
+    private List<Imagen> imagenes = new ArrayList<>();
 
-    /** Especificaciones técnicas en formato clave-valor (ej. "Peso" -> "120 g"). */
+    /** Especificaciones técnicas agrupadas. */
     @Builder.Default
-    private Map<String, String> especificaciones = new LinkedHashMap<>();
+    private List<EspecificacionGrupo> especificaciones = new ArrayList<>();
 
-    /** Fecha de creación de la ficha. */
-    private LocalDateTime fechaCreacion;
+    /** Reseñas de clientes. */
+    @Builder.Default
+    private List<Comentario> comentarios = new ArrayList<>();
 
-    /** Fecha de la última actualización. */
-    private LocalDateTime fechaActualizacion;
+    /** Baja lógica de la ficha. */
+    @Builder.Default
+    private Boolean activo = true;
+
+    /** Última sincronización con Icecat o alta manual. */
+    private LocalDateTime fechaSincronizacion;
 }

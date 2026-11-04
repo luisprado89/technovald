@@ -1,6 +1,7 @@
 package com.technovald.controller;
 
-import com.technovald.dto.response.ProductoCatalogoResponse;
+import com.technovald.dto.response.ProductoCatalogoDetalleResponse;
+import com.technovald.dto.response.ProductoCatalogoResumenResponse;
 import com.technovald.service.CatalogoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** Controlador REST del catálogo público (accesible sin autenticación). */
+/** Catálogo público: sin autenticación. */
 @RestController
 @RequestMapping("/api/catalogo")
 @RequiredArgsConstructor
@@ -20,23 +21,23 @@ public class CatalogoController {
     private final CatalogoService catalogoService;
 
     /**
-     * Devuelve todos los productos del catálogo.
+     * Listado ligero de fichas activas.
      *
-     * @return lista de fichas públicas.
+     * @return las tarjetas del catálogo.
      */
     @GetMapping
-    public ResponseEntity<List<ProductoCatalogoResponse>> listarProductosCatalogo() {
+    public ResponseEntity<List<ProductoCatalogoResumenResponse>> listarProductosCatalogo() {
         return ResponseEntity.ok(catalogoService.listarProductosCatalogo());
     }
 
     /**
-     * Devuelve el detalle de un producto por su EAN.
+     * Detalle completo de una ficha.
      *
      * @param ean código de barras del producto.
-     * @return la ficha pública del producto.
+     * @return la ficha completa.
      */
     @GetMapping("/{ean}")
-    public ResponseEntity<ProductoCatalogoResponse> detalleProductoCatalogo(@PathVariable String ean) {
+    public ResponseEntity<ProductoCatalogoDetalleResponse> detalleProductoCatalogo(@PathVariable String ean) {
         return ResponseEntity.ok(catalogoService.obtenerProductoCatalogoPorEan(ean));
     }
 }

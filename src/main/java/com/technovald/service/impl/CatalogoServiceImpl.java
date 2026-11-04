@@ -2,7 +2,8 @@ package com.technovald.service.impl;
 
 import com.technovald.document.ProductoDocumento;
 import com.technovald.dto.request.ProductoCatalogoRequest;
-import com.technovald.dto.response.ProductoCatalogoResponse;
+import com.technovald.dto.response.ProductoCatalogoDetalleResponse;
+import com.technovald.dto.response.ProductoCatalogoResumenResponse;
 import com.technovald.entity.ProductoInventario;
 import com.technovald.exception.ResourceNotFoundException;
 import com.technovald.mapper.ProductoCatalogoMapper;
@@ -19,7 +20,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/** Implementación de {@link CatalogoService}. */
+/**
+ * Implementación de {@link CatalogoService}.
+ *
+ * <p>
+ * El listado devuelve solo las fichas activas y se enriquece con el precio y el
+ * stock de MySQL en una sola consulta. El detalle incluye descripciones,
+ * galería, especificaciones y reseñas. El alta manual hace upsert por EAN y
+ * conserva los comentarios y el estado de una ficha existente.
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -29,51 +39,71 @@ public class CatalogoServiceImpl implements CatalogoService {
     private final ProductoInventarioRepository productoInventarioRepository;
     private final ProductoCatalogoMapper productoCatalogoMapper;
 
-    /** Devuelve todas las fichas de catálogo enriquecidas con precio y stock. */
+    /**
+     * Devuelve las fichas activas para las tarjetas del catálogo.
+     *
+     * <p>
+     * El precio y el stock se resuelven con una única consulta a MySQL, para no
+     * hacer una consulta por cada ficha del listado.
+     * </p>
+     *
+     * @return las fichas activas ordenadas por nombre corto.
+     */
     @Override
-    public List<ProductoCatalogoResponse> listarProductosCatalogo() {
-        List<ProductoDocumento> documentos = productoMongoRepository.findAllByOrderByNombreAsc();
-        return productoCatalogoMapper.toResponseList(documentos, mapaInventarioPorEan(documentos));
-    }
-
-    /** Busca una ficha por su EAN o lanza una excepción si no existe. */
-    @Override
-    public ProductoCatalogoResponse obtenerProductoCatalogoPorEan(String ean) {
-        String normalizado = normalizar(ean);
-        ProductoDocumento documento = productoMongoRepository.findByEan(normalizado)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Producto de catálogo no encontrado con EAN: " + normalizado));
-
-        return productoCatalogoMapper.toResponse(documento, buscarInventarioPorEan(normalizado));
+    public List<ProductoCatalogoResumenResponse> listarProductosCatalogo() {
+        List<ProductoDocumento> documentos = productoMongoRepository.findAllByActivoTrueOrderByNombreCortoAsc();
+        return productoCatalogoMapper.toResumenList(documentos, mapaInventario(documentos));
     }
 
     /**
-     * Guarda una ficha de catálogo. Si ya existe una con el mismo EAN, la actualiza
-     * (upsert); si no, la crea.
+     * Obtiene la ficha completa de un producto activo.
+     *
+     * @param ean código de barras del producto.
+     * @return la ficha con descripciones, galería, especificaciones y reseñas.
+     * @throws ResourceNotFoundException si no existe una ficha activa con ese EAN.
      */
     @Override
-    public ProductoCatalogoResponse guardarProductoCatalogo(ProductoCatalogoRequest productoCatalogoRequest) {
-        String ean = normalizar(productoCatalogoRequest.getEan());
-        ProductoDocumento existente = productoMongoRepository.findByEan(ean).orElse(null);
-        ProductoDocumento documento = productoCatalogoMapper.toDocumento(productoCatalogoRequest, existente);
+    public ProductoCatalogoDetalleResponse obtenerProductoCatalogoPorEan(String ean) {
+        String normalizado = normalizar(ean);
+        ProductoDocumento documento = productoMongoRepository.findByEanAndActivoTrue(normalizado)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Producto de catálogo no encontrado con EAN: " + normalizado));
 
-        LocalDateTime ahora = LocalDateTime.now();
-        if (documento.getFechaCreacion() == null) {
-            documento.setFechaCreacion(ahora);
-        }
-        documento.setFechaActualizacion(ahora);
+        return productoCatalogoMapper.toDetalle(documento, buscarInventario(normalizado));
+    }
+
+    /**
+     * Crea o actualiza una ficha manualmente.
+     *
+     * <p>
+     * Si la ficha ya existe se conservan sus comentarios y, si la petición no
+     * indica lo contrario, su estado. La fecha de sincronización se actualiza en
+     * cada guardado.
+     * </p>
+     *
+     * @param request datos de la ficha.
+     * @return la ficha completa guardada.
+     */
+    @Override
+    public ProductoCatalogoDetalleResponse guardarProductoCatalogo(ProductoCatalogoRequest request) {
+        String ean = normalizar(request.getEan());
+        ProductoDocumento existente = productoMongoRepository.findByEan(ean).orElse(null);
+        ProductoDocumento documento = productoCatalogoMapper.toDocumento(request, existente);
+        documento.setFechaSincronizacion(LocalDateTime.now());
 
         ProductoDocumento guardado = productoMongoRepository.save(documento);
         log.info("Ficha de catálogo guardada: EAN {} (id {})", ean, guardado.getId());
 
-        return productoCatalogoMapper.toResponse(guardado, buscarInventarioPorEan(ean));
+        return productoCatalogoMapper.toDetalle(guardado, buscarInventario(ean));
     }
 
     /**
-     * Devuelve un mapa de productos de MySQL indexado por su EAN.
-     * Se usa para enriquecer listas grandes de fichas de catálogo sin hacer N+1 consultas.
+     * Construye el mapa de productos de MySQL indexado por EAN.
+     *
+     * @param documentos fichas del catálogo.
+     * @return el mapa EAN → producto, vacío si no hay fichas.
      */
-    private Map<String, ProductoInventario> mapaInventarioPorEan(List<ProductoDocumento> documentos) {
+    private Map<String, ProductoInventario> mapaInventario(List<ProductoDocumento> documentos) {
         List<String> eans = documentos.stream().map(ProductoDocumento::getEan).toList();
         if (eans.isEmpty()) {
             return Map.of();
@@ -86,14 +116,21 @@ public class CatalogoServiceImpl implements CatalogoService {
     }
 
     /**
-     * Busca un único producto en el inventario (MySQL) por su EAN.
-     * Devuelve {@code null} si no existe en el inventario.
+     * Busca el producto de inventario asociado a un EAN.
+     *
+     * @param ean EAN de la ficha.
+     * @return el producto, o {@code null} si no está en el inventario.
      */
-    private ProductoInventario buscarInventarioPorEan(String ean) {
+    private ProductoInventario buscarInventario(String ean) {
         return productoInventarioRepository.findByEanIgnoreCase(ean).orElse(null);
     }
 
-    /** Limpia espacios y pasa el EAN a mayúsculas para evitar duplicados. */
+    /**
+     * Normaliza el EAN a mayúsculas y sin espacios.
+     *
+     * @param ean EAN original.
+     * @return el EAN normalizado.
+     */
     private String normalizar(String ean) {
         return ean.trim().toUpperCase(Locale.ROOT);
     }

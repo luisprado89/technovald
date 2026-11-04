@@ -3,7 +3,7 @@ package com.technovald.service.impl;
 import com.technovald.client.IcecatClient;
 import com.technovald.document.ProductoDocumento;
 import com.technovald.dto.icecat.IcecatResponse;
-import com.technovald.dto.response.ProductoCatalogoResponse;
+import com.technovald.dto.response.ProductoCatalogoDetalleResponse;
 import com.technovald.dto.response.SincronizacionResponse;
 import com.technovald.entity.ProductoInventario;
 import com.technovald.exception.ResourceNotFoundException;
@@ -25,9 +25,9 @@ import java.util.Locale;
  * Implementación de {@link IcecatService}.
  *
  * <p>
- * Hace upsert por EAN en MongoDB: si el documento existe conserva su
- * {@code id} y su {@code fechaCreacion}; la {@code fechaActualizacion} se
- * refresca en cada sincronización.
+ * Hace upsert por EAN en MongoDB. El EAN solicitado manda sobre el de Icecat
+ * porque es el puente con el inventario; la fecha de sincronización se
+ * actualiza en cada ejecución y el estado de la ficha se conserva.
  * </p>
  */
 @Service
@@ -45,12 +45,12 @@ public class IcecatServiceImpl implements IcecatService {
      * Sincroniza la ficha de un EAN y la guarda en MongoDB.
      *
      * @param ean código de barras del producto.
-     * @return la ficha guardada, con precio y stock del inventario.
+     * @return la ficha completa guardada.
      * @throws ResourceNotFoundException si el EAN no existe en MySQL.
      * @throws com.technovald.exception.IcecatApiException si Icecat falla.
      */
     @Override
-    public ProductoCatalogoResponse sincronizarProducto(String ean) {
+    public ProductoCatalogoDetalleResponse sincronizarProducto(String ean) {
         String normalizado = ean.trim().toUpperCase(Locale.ROOT);
 
         ProductoInventario inventario = productoInventarioRepository.findByEanIgnoreCase(normalizado)
@@ -60,22 +60,17 @@ public class IcecatServiceImpl implements IcecatService {
         IcecatResponse respuesta = icecatClient.obtenerProducto(normalizado);
         ProductoDocumento existente = productoMongoRepository.findByEan(normalizado).orElse(null);
         ProductoDocumento documento = icecatMapper.toDocumento(respuesta, normalizado, existente);
-
-        LocalDateTime ahora = LocalDateTime.now();
-        if (documento.getFechaCreacion() == null) {
-            documento.setFechaCreacion(ahora);
-        }
-        documento.setFechaActualizacion(ahora);
+        documento.setFechaSincronizacion(LocalDateTime.now());
 
         ProductoDocumento guardado = productoMongoRepository.save(documento);
         log.info("Ficha sincronizada desde Icecat: EAN {}", normalizado);
 
-        return productoCatalogoMapper.toResponse(guardado, inventario);
+        return productoCatalogoMapper.toDetalle(guardado, inventario);
     }
 
     /**
-     * Recorre todo el inventario y sincroniza cada EAN. Un fallo individual
-     * se registra y se acumula, pero no detiene el resto.
+     * Recorre todo el inventario y sincroniza cada EAN. Un fallo individual se
+     * registra y se acumula, pero no detiene el resto.
      *
      * @return el resumen con total, sincronizados, fallidos y errores.
      */
@@ -95,8 +90,7 @@ public class IcecatServiceImpl implements IcecatService {
             }
         }
 
-        log.info("Sincronización Icecat terminada: {} de {} productos",
-                sincronizados, productos.size());
+        log.info("Sincronización Icecat terminada: {} de {} productos", sincronizados, productos.size());
         return new SincronizacionResponse(productos.size(), sincronizados, errores.size(), errores);
     }
 }

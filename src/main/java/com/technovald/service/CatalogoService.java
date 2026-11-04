@@ -1,27 +1,36 @@
 package com.technovald.service;
 
 import com.technovald.dto.request.ProductoCatalogoRequest;
-import com.technovald.dto.response.ProductoCatalogoResponse;
+import com.technovald.dto.response.ProductoCatalogoDetalleResponse;
+import com.technovald.dto.response.ProductoCatalogoResumenResponse;
 
 import java.util.List;
 
-/** Gestión del catálogo público de productos (MongoDB). */
+/** Catálogo público y alta manual de fichas. */
 public interface CatalogoService {
 
-    /** Devuelve todas las fichas del catálogo, enriquecidas con precios y stock de MySQL. */
-    List<ProductoCatalogoResponse> listarProductosCatalogo();
-
     /**
-     * Obtiene una ficha por su EAN.
+     * Devuelve las fichas activas para las tarjetas del catálogo.
      *
-     * @throws com.technovald.exception.ResourceNotFoundException si no existe ninguna ficha con ese EAN.
+     * @return las fichas activas ordenadas por nombre corto.
      */
-    ProductoCatalogoResponse obtenerProductoCatalogoPorEan(String ean);
-
+    List<ProductoCatalogoResumenResponse> listarProductosCatalogo();
 
     /**
-     * Crea o actualiza una ficha de catálogo.
-     * Si el EAN ya existe, actualiza la ficha; si no, la crea (upsert).
+     * Obtiene la ficha completa de un producto activo.
+     *
+     * @param ean código de barras del producto.
+     * @return la ficha con descripciones, galería, especificaciones y reseñas.
+     * @throws com.technovald.exception.ResourceNotFoundException si no existe
+     *         una ficha activa con ese EAN.
      */
-    ProductoCatalogoResponse guardarProductoCatalogo(ProductoCatalogoRequest productoCatalogoRequest);
+    ProductoCatalogoDetalleResponse obtenerProductoCatalogoPorEan(String ean);
+
+    /**
+     * Crea o actualiza una ficha manualmente (upsert por EAN).
+     *
+     * @param request datos de la ficha.
+     * @return la ficha completa guardada.
+     */
+    ProductoCatalogoDetalleResponse guardarProductoCatalogo(ProductoCatalogoRequest request);
 }
