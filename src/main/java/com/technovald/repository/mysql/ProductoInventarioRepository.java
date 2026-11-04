@@ -56,6 +56,18 @@ public interface ProductoInventarioRepository extends JpaRepository<ProductoInve
             """)
     int decrementarStockAtomico(@Param("id") Long id, @Param("cantidad") Integer cantidad);
 
+    /**
+     * Suma stock en una sola sentencia. Devuelve 0 si el producto no existe
+     * o está inactivo.
+     */
+    @Modifying
+    @Query("""
+            update ProductoInventario p
+            set p.stockActual = p.stockActual + :cantidad
+            where p.id = :id and p.activo = true
+            """)
+    int incrementarStockAtomico(@Param("id") Long id, @Param("cantidad") Integer cantidad);
+
     /** Productos activos por lista de EAN (para resolver la bandeja de reseñas). */
     List<ProductoInventario> findAllByEanInAndActivoTrue(Collection<String> eans);
 }

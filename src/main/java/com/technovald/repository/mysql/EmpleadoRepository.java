@@ -49,4 +49,18 @@ public interface EmpleadoRepository extends JpaRepository<Empleado, Long> {
      */
     @EntityGraph(attributePaths = {"persona", "persona.usuario"})
     List<Empleado> findAllByOrderByIdAsc();
+
+    /**
+     * Busca el perfil de empleado activo de una persona.
+     *
+     * <p>
+     * Es la consulta que usa la creación de solicitudes: del usuario
+     * autenticado se pasa a su persona y de ahí a su ficha de empleado.
+     * </p>
+     *
+     * @param personaId id de la persona.
+     * @return el empleado activo, o vacío si esa persona no tiene ficha.
+     */
+    @EntityGraph(attributePaths = {"persona"})
+    Optional<Empleado> findByPersonaIdAndActivoTrue(Long personaId);
 }

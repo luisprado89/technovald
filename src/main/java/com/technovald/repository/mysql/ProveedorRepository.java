@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Repositorio JPA para {@link Proveedor}. */
 @Repository
@@ -21,4 +22,7 @@ public interface ProveedorRepository extends JpaRepository<Proveedor, Long> {
 
     /** Comprueba si un CIF ya está registrado en otro proveedor distinto (para la edición). */
     boolean existsByCifIgnoreCaseAndIdNot(String cif, Long id);
+
+    /** Busca un proveedor activo por id (para la solicitud de reposición). */
+    Optional<Proveedor> findByIdAndActivoTrue(Long id);
 }
