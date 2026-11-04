@@ -151,6 +151,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/pedidos/*/estado")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
 
+                        // Comentarios: lectura pública; publica el cliente; responde el staff
+                        .requestMatchers(HttpMethod.GET, "/api/comentarios/producto/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/comentarios").hasRole("CLIENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/comentarios/pendientes")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+                        .requestMatchers(HttpMethod.PUT, "/api/comentarios/*/responder")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
