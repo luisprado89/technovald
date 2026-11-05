@@ -159,6 +159,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/comentarios/*/responder")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
 
+                        // Solicitudes de reposición: solo ADMIN y TRABAJADOR
+                        .requestMatchers("/api/solicitudes", "/api/solicitudes/**")
+                        .hasAnyRole("ADMIN", "TRABAJADOR")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
