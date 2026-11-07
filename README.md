@@ -1,112 +1,296 @@
 # TechNovaLD — API REST de E-commerce
 
-Backend de la tienda TechNovaLD: una API REST en Spring Boot para gestionar
-catálogo de productos, inventario, pedidos, reposiciones de stock y personal.
+![Java](https://img.shields.io/badge/Java-17-blue)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-orange)
+![MongoDB](https://img.shields.io/badge/MongoDB-cat%C3%A1logo-green)
+![Flyway](https://img.shields.io/badge/Flyway-migraciones-red)
+![JWT](https://img.shields.io/badge/JWT-stateless-blueviolet)
+![Swagger](https://img.shields.io/badge/Swagger-OpenAPI-85EA2D)
 
-## 🛠️ Stack
+---
 
-| Elemento | Versión |
-| --- | --- |
-| Java | 17 |
-| Spring Boot | 4.1.1 |
-| Maven | 3.9.16 (vía Maven Wrapper) |
-| MySQL | 8 o superior |
+## 📋 Índice
 
-El `pom.xml` declara ya el conjunto completo de dependencias del proyecto.
+1. [Visión general](#-visión-general)
+2. [Características principales](#-características-principales)
+3. [Stack tecnológico](#-stack-tecnológico)
+4. [Arquitectura en una vista](#-arquitectura-en-una-vista)
+5. [Estructura de carpetas](#-estructura-de-carpetas)
+6. [Puesta en marcha en local](#-puesta-en-marcha-en-local)
+7. [Cómo ejecutar los tests](#-cómo-ejecutar-los-tests)
+8. [Administrador inicial y secretos](#-administrador-inicial-y-secretos)
+9. [Endpoints de la API](#-endpoints-de-la-api)
+10. [Diagramas](#-diagramas)
+11. [Documentación](#-documentación)
+12. [Inventario de Funcionalidades (Para uso interno)](#-inventario-de-funcionalidades-para-uso-interno)
+
+---
+
+## 📄 Visión general
+
+**TechNovaLD** es una API REST para la gestión de un e-commerce de informática y electrónica. Implementa el ciclo de catálogo público, registro de clientes, pedidos, gestión de inventario, reposición de stock, reseñas de producto y administración mediante endpoints.
+
+El rasgo que define el diseño es la **persistencia políglota**:
+
+- **MySQL 8** guarda todo lo **transaccional y operativo**: identidad (personas, usuarios, clientes, empleados), maestros (categorías, proveedores), inventario, pedidos y solicitudes de reposición. Es la fuente de verdad del stock y del dinero.
+- **MongoDB** guarda el **catálogo enriquecido**: la ficha técnica de cada producto —título, nombre corto, descripciones, galería de imágenes en varias resoluciones, grupos de especificaciones— más los **comentarios embebidos** de los clientes.
+
+Ambas orillas se unen por un único campo compartido: el **EAN** (código de barras). En MySQL es `producto_inventario.ean`; en MongoDB es `productos.ean`. Es el puente que permite resolver una ficha de catálogo a partir de una fila de inventario y a la inversa.
+
+El control de acceso es **RBAC con JWT stateless** sobre tres roles: `ADMIN`, `TRABAJADOR` y `CLIENTE`. La separación de responsabilidades de datos es deliberada: aislar la alta carga de lectura del catálogo público (MongoDB) de las operaciones críticas de inventario y venta (MySQL).
+
+---
+
+## 🌟 Características principales
+
+- **Arquitectura políglota** MySQL + MongoDB, con el EAN como identificador compartido.
+- **Autenticación JWT** con revocación de tokens por versión (`usuario.token_version`): cambiar o resetear la contraseña invalida al instante todos los JWT anteriores aunque no hayan expirado.
+- **RBAC de tres roles** aplicado en `SecurityConfig` por URL.
+- **Registro público de clientes con auto-login**: el alta devuelve un JWT listo para usar.
+- **Pedidos con congelación de precio**: el detalle guarda un *snapshot* del precio de venta en el momento de la compra, de modo que un cambio de tarifa posterior no altera pedidos históricos.
+- **Descuento de stock atómico**: la comprobación y el decremento se resuelven en una sola sentencia SQL, lo que elimina la ventana de concurrencia que permitía sobrevender.
+- **Recepción de reposición idempotente**: transición de estado condicional + incremento de stock atómico, de forma que dos peticiones simultáneas no dupliquen la entrada de mercancía.
+- **Borrado lógico (soft delete) universal** mediante la columna `activo`, con baja en cascada gestionada por los servicios.
+- **Sincronización con Icecat** para descargar y mapear fichas técnicas reales a MongoDB, preservando los comentarios existentes al re-sincronizar.
+- **Reseñas con respuesta oficial** del personal y bandeja de comentarios pendientes, resuelta con un *pipeline* de agregación de MongoDB.
+- **Recuperación de contraseña por email**: simulación en consola en `dev` y Gmail SMTP en `prod`.
+- **Documentación OpenAPI/Swagger** navegable y **migraciones Flyway** versionadas.
+- **Paginación** en los listados de clientes y pedidos.
+
+---
+
+## 🛠️ Stack tecnológico
+
+Versiones tomadas de `pom.xml`.
+
+| Componente | Versión | Para qué |
+|---|---|---|
+| Java | **17** (`java.version`) | Lenguaje y bytecode objetivo |
+| Spring Boot | **4.1.1** | Framework base (parent) |
+| Spring Web | gestionada por Boot | API REST sobre Tomcat embebido |
+| Spring Security | gestionada por Boot | Autenticación y autorización |
+| Spring Data JPA / Hibernate | gestionada por Boot | Persistencia relacional (MySQL) |
+| Spring Data MongoDB | gestionada por Boot | Persistencia documental (catálogo) |
+| Spring Validation | gestionada por Boot | Validación de DTOs (`jakarta.validation`) |
+| Spring Mail | gestionada por Boot | Envío del email de reseteo de contraseña |
+| Spring Boot Actuator | gestionada por Boot | Monitorización y salud |
+| MySQL | **8.0** | Base de datos operativa y transaccional |
+| `mysql-connector-j` | gestionada por Boot | Driver JDBC |
+| MongoDB | **6+** | Base de datos del catálogo |
+| Flyway | starter de Boot + `flyway-mysql` | Migraciones versionadas del esquema |
+| JJWT | **0.12.6** (`jjwt-api`, `jjwt-impl`, `jjwt-jackson`) | Generación y validación de JWT |
+| springdoc-openapi | **3.1.0** | Swagger UI y especificación OpenAPI |
+| Lombok | gestionada por Boot | Reducción de *boilerplate* |
+| JUnit 5 + AssertJ + Mockito | vía `spring-boot-starter-test` | Pruebas |
+| spring-security-test | vía Boot | Utilidades de test de seguridad |
+| Maven Wrapper | incluido | Build reproducible sin Maven global |
+
+**Notas de fidelidad al repositorio:**
+
+- **No se usa MapStruct.** Los **12 mappers** son clases anotadas con `@Component` escritas a mano: `PersonaMapper`, `ClienteMapper`, `EmpleadoMapper`, `CategoriaMapper`, `ProveedorMapper`, `ProductoInventarioMapper`, `PedidoMapper`, `PedidoDetalleMapper`, `ComentarioMapper`, `ProductoCatalogoMapper`, `SolicitudReposicionMapper` e `IcecatMapper`.
+- El *JAR* generado se llama **`app.jar`** porque el `pom.xml` fija `<finalName>app</finalName>`; así el comando de arranque no depende de la versión del proyecto.
+- El esquema lo gestiona **exclusivamente Flyway**. Hibernate trabaja en `ddl-auto=validate`: solo comprueba que las entidades coinciden con el esquema, nunca lo modifica.
+- Las migraciones actuales son **`V1__init_schema.sql`** (10 tablas) y **`V2__add_proveedor_cif.sql`** (CIF único y nullable en `proveedor`).
+
+---
+
+## 🏗️ Arquitectura en una vista
+
+Arquitectura en capas estricta. Cada capa solo conoce a la de debajo:
+
+```mermaid
+graph TD
+    Client["Cliente HTTP / Swagger / Postman"]
+
+    subgraph Security["Capa transversal de seguridad"]
+        Filter["JwtAuthenticationFilter"]
+        SecCfg["SecurityConfig<br/>reglas URL + CORS"]
+    end
+
+    subgraph Web["Capa de presentación"]
+        Controllers["Controllers (12)<br/>@RestController"]
+        Advice["GlobalExceptionHandler<br/>ErrorResponse uniforme"]
+    end
+
+    subgraph App["Capa de aplicación"]
+        Services["Services (12 interfaces)"]
+        Impls["ServiceImpl (13)<br/>reglas de negocio"]
+    end
+
+    subgraph Mapping["Capa de mapeo"]
+        Mappers["Mappers (12)<br/>Entity ↔ DTO (@Component)"]
+    end
+
+    subgraph Data["Capa de datos"]
+        RepoMy["Repositories JPA (10)"]
+        RepoMo["Repository Mongo (1)"]
+    end
+
+    subgraph Stores["Almacenamiento"]
+        MySQL[("MySQL 8<br/>operativo")]
+        Mongo[("MongoDB<br/>catálogo")]
+    end
+
+    Client --> Filter --> SecCfg --> Controllers
+    Controllers --> Advice
+    Controllers --> Services
+    Services --> Impls
+    Impls --> Mappers
+    Impls --> RepoMy
+    Impls --> RepoMo
+    RepoMy --> MySQL
+    RepoMo --> Mongo
+    Impls -.->|"puente EAN"| RepoMo
+```
+
+### Regla de dependencia
+
+```
+controller  →  service (interfaz)  →  service.impl  →  mapper  →  repository  →  entity / document
+```
+
+- Los **controladores nunca tocan repositorios** ni entidades directamente: hablan con interfaces de servicio y devuelven DTOs.
+- Las **entidades JPA nunca se serializan** como respuesta; todas las salidas son DTOs.
+- El **puente entre almacenes vive en la capa de servicio**, no en los repositorios: los servicios son quienes cruzan MySQL y MongoDB por EAN.
+- Las reglas RBAC viven en `SecurityConfig`; los controladores no repiten la comprobación de rol.
+
+Los diagramas UML, Entidad-Relación y de flujo están en [Diagramas](#-diagramas).
+
+---
 
 ## 📂 Estructura de carpetas
 
-```
+```text
 TechNovaLD/
-├── .mvn/wrapper/
-│   └── maven-wrapper.properties              # versión de Maven fijada (3.9.16)
+├── .mvn/wrapper/maven-wrapper.properties
 ├── src/
 │   ├── main/
 │   │   ├── java/com/technovald/
-│   │   │   ├── TechNovaLdApplication.java    # punto de entrada
-│   │   │   ├── config/
-│   │   │   │   └── SecurityConfig.java       # cadena de seguridad JWT
-│   │   │   ├── controller/
-│   │   │   │   ├── AdminEmpleadoController.java  # alta y consulta de empleados (ADMIN)
-│   │   │   │   ├── AuthController.java       # POST /api/auth/login
-│   │   │   │   └── ClienteController.java    # alta de cliente y perfil propio
+│   │   │   ├── TechNovaLdApplication.java      # Punto de entrada (@SpringBootApplication,
+│   │   │   │                                   #  @EnableAsync)
+│   │   │   ├── client/                         # IcecatClient: cliente HTTP del servicio externo
+│   │   │   ├── config/                         # SecurityConfig, OpenApiConfig, RestTemplateConfig
+│   │   │   ├── controller/                     # 12 controladores REST
+│   │   │   ├── document/                       # 5 documentos MongoDB (catálogo)
 │   │   │   ├── dto/
-│   │   │   │   ├── request/
-│   │   │   │   │   ├── ClienteRegistroRequest.java
-│   │   │   │   │   ├── ClienteUpdateRequest.java
-│   │   │   │   │   ├── EmpleadoRegistroRequest.java
-│   │   │   │   │   └── LoginRequest.java
-│   │   │   │   └── response/
-│   │   │   │       ├── AuthResponse.java
-│   │   │   │       ├── ClienteRegistroResponse.java
-│   │   │   │       ├── ClienteResponse.java
-│   │   │   │       ├── EmpleadoRegistroResponse.java
-│   │   │   │       └── EmpleadoResponse.java
-│   │   │   ├── entity/                       # 10 entidades JPA (MySQL)
-│   │   │   ├── enums/                        # RolUsuario, EstadoPedido, EstadoSolicitud
-│   │   │   ├── exception/
-│   │   │   │   ├── BusinessRuleException.java
-│   │   │   │   ├── GlobalExceptionHandler.java
-│   │   │   │   └── ResourceNotFoundException.java
-│   │   │   ├── mapper/
-│   │   │   │   ├── ClienteMapper.java
-│   │   │   │   ├── EmpleadoMapper.java
-│   │   │   │   └── PersonaMapper.java
-│   │   │   ├── repository/mysql/             # repositorios JPA
-│   │   │   ├── security/
-│   │   │   │   ├── CredentialGenerator.java
-│   │   │   │   ├── CustomUserDetailsService.java
-│   │   │   │   ├── JwtAuthenticationFilter.java
-│   │   │   │   └── JwtService.java
-│   │   │   ├── seeder/
-│   │   │   │   └── AdminBootstrapInitializer.java
+│   │   │   │   ├── request/                    # 17 DTOs de entrada
+│   │   │   │   ├── response/                   # 19 DTOs de salida
+│   │   │   │   └── icecat/                     # 11 DTOs que reflejan la respuesta de Icecat
+│   │   │   ├── entity/                         # 10 entidades JPA (MySQL)
+│   │   │   ├── enums/                          # RolUsuario, EstadoPedido, EstadoSolicitud
+│   │   │   ├── exception/                      # Excepciones de dominio +
+│   │   │   │                                   #  GlobalExceptionHandler
+│   │   │   ├── mapper/                         # 12 mappers Entity ↔ DTO
+│   │   │   ├── repository/
+│   │   │   │   ├── mysql/                      # 10 repositorios JPA
+│   │   │   │   └── mongo/                      # 1 repositorio MongoDB
+│   │   │   ├── security/                       # JwtService, JwtAuthenticationFilter,
+│   │   │   │                                   #  CustomUserDetailsService, CredentialGenerator
+│   │   │   ├── seeder/                         # AdminBootstrapInitializer
 │   │   │   └── service/
-│   │   │       ├── AuthService.java
-│   │   │       ├── ClienteService.java
-│   │   │       ├── EmpleadoService.java
-│   │   │       └── impl/
-│   │   │           ├── AuthServiceImpl.java
-│   │   │           ├── ClienteServiceImpl.java
-│   │   │           └── EmpleadoServiceImpl.java
+│   │   │       └── impl/                       # 13 implementaciones
 │   │   └── resources/
-│   │       ├── application.properties        # configuración de la aplicación
+│   │       ├── application.properties          # Configuración común
+│   │       ├── application-dev.properties      # Perfil dev (local / IDE)
+│   │       ├── application-prod.properties     # Perfil prod (SMTP y logs)
 │   │       └── db/migration/
-│   │           └── V1__init_schema.sql       # las 10 tablas del modelo
+│   │           ├── V1__init_schema.sql         # 10 tablas (columnas, PK, unique, FK)
+│   │           └── V2__add_proveedor_cif.sql   # CIF único y nullable en proveedor
 │   └── test/
 │       └── java/com/technovald/
-│           └── TechNovaLdApplicationTests.java   # test de contexto
-├── .env.example                              # plantilla de variables de entorno
+│           └── TechNovaLdApplicationTests.java # Test de carga de contexto
+├── .env.example
 ├── .gitattributes
 ├── .gitignore
-├── mvnw / mvnw.cmd                           # lanzadores del wrapper
+├── mvnw
+├── mvnw.cmd
 ├── pom.xml
 └── README.md
 ```
 
-El fichero `.env` no aparece en la estructura porque está en `.gitignore`: es
-local y nunca se sube al repositorio.
+El árbol muestra solo el backend y sus recursos de configuración; el fichero `.env` no se versiona.
 
-## 🚀 Puesta en marcha
+**Cómputo de ficheros:** 12 controladores + 12 interfaces de servicio + 13 implementaciones + 12 mappers + 10 entidades + 5 documentos + 3 enums + 47 DTOs + 11 repositorios + 4 excepciones + 4 clases de seguridad + 1 seeder + 3 clases de configuración + 1 cliente + 1 entrada = **139 ficheros Java**.
+
+---
+
+## 🚀 Puesta en marcha en local
+
+Para ejecutar la API directamente desde el IDE o la terminal, con MySQL y MongoDB instalados en la máquina.
 
 ### Requisitos previos
 
-- **JDK 17** (`java -version`).
-- **MySQL 8 o superior** en marcha; por defecto se espera en `localhost:3306`.
-- No hace falta instalar Maven: `mvnw` / `mvnw.cmd` descargan la versión fijada
-  en `.mvn/wrapper/maven-wrapper.properties` la primera vez que se ejecutan.
+| Requisito | Versión | Comprobación |
+|---|---|---|
+| JDK | **17** o superior (el bytecode objetivo es 17) | `java -version` |
+| MySQL | **8.0** en adelante, escuchando en `localhost:3306` | `mysql --version` |
+| MongoDB | Accesible en `localhost:27017` | `mongosh --eval "db.runCommand({ping:1})"` |
+| Maven Wrapper | incluido en el repositorio | `.\mvnw.cmd -v` |
 
-### 1. Crear el fichero de entorno
+> El **Maven Wrapper** (`mvnw` / `mvnw.cmd`) viene incluido, así que **no necesitas instalar Maven**. Usa `./mvnw` en Linux/macOS y `.\mvnw.cmd` en Windows.
 
-```powershell
+### 1. Clonar y crear el fichero de entorno
+
+```bash
+git clone <URL_DEL_REPOSITORIO>
+cd TechNovaLD
+
+# Linux / macOS
+cp .env.example .env
+
+# Windows (PowerShell)
 Copy-Item .env.example .env
 ```
 
-Y rellenar en `.env`:
+El `.env` está en `.gitignore` y **nunca debe subirse al repositorio**. Se carga en local de forma automática porque `application.properties` incluye:
 
-- `MYSQL_PASSWORD` (y `MYSQL_USER` si no es `root`).
-- `BOOTSTRAP_ADMIN_PASSWORD`: la contraseña del administrador inicial.
-- `BOOTSTRAP_ADMIN_USERNAME`, si no quieres `admin.technovald`.
-- `JWT_SECRET`: 32 bytes aleatorios en Base64. Para generar uno:
+```properties
+spring.config.import=optional:file:.env[.properties]
+```
+
+### 2. Rellenar el `.env` (perfil dev)
+
+Valores mínimos para arrancar en local. **No escribas secretos reales en ningún fichero versionado**: aquí van solo para tu máquina.
+
+```properties
+SPRING_PROFILES_ACTIVE=dev
+PORT=8080
+
+# MySQL local
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=technovald
+MYSQL_USER=root
+MYSQL_PASSWORD=<TU_PASSWORD_LOCAL>
+
+# MongoDB (la base va incluida en la URI)
+MONGO_URI=mongodb://localhost:27017/technovald_catalogo
+
+# Icecat (API externa de fichas de producto)
+ICECAT_URL=https://live.icecat.biz/api/?UserName=...&Language=es&GTIN=
+ICECAT_TOKEN=<TU_TOKEN_ICECAT>
+
+# JWT
+JWT_SECRET=<CADENA_BASE64_DE_AL_MENOS_256_BITS>
+JWT_EXPIRATION=86400000
+
+# Administrador inicial (solo se usa con la tabla usuario vacía)
+BOOTSTRAP_ADMIN_USERNAME=admin.technovald
+BOOTSTRAP_ADMIN_PASSWORD=<TU_PASSWORD_INICIAL>
+
+# SMTP (solo se usa con el perfil prod)
+GMAIL_USER=<TU_EMAIL>
+GMAIL_APP_PASSWORD=<TU_APP_PASSWORD>
+```
+
+`JWT_SECRET` debe ser una cadena **codificada en Base64** de al menos 256 bits (32 bytes antes de codificar), porque JJWT lo exige para firmar con HS256. Puedes generar una con:
+
+```bash
+openssl rand -base64 32
+```
+
+En PowerShell:
 
 ```powershell
 $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -115,911 +299,737 @@ $rng.GetBytes($bytes)
 [Convert]::ToBase64String($bytes)
 ```
 
-- `JWT_EXPIRATION`: la vida del token en milisegundos (`86400000` son 24 horas).
+### 3. Crear la base de datos
 
-Los valores de MySQL y de JWT no tienen valor por defecto a propósito: sin ellos
-la aplicación no arranca.
+La URL JDBC incluye `createDatabaseIfNotExist=true`, así que **MySQL crea el esquema vacío por sí solo**. No hace falta ejecutar ningún SQL a mano: al arrancar, **Flyway** aplica las migraciones `V1` (tablas) y `V2` (CIF de proveedor) y las registra en `flyway_schema_history`.
 
-### 2. Crear la base de datos
+> ⚠️ **La base de datos debe estar vacía en el primer arranque con Flyway.** Si el esquema lo creó antes Hibernate con `ddl-auto=update`, esas tablas no están en `flyway_schema_history` y Flyway abortará con `Found non-empty schema but no schema history table`. En ese caso, borra el esquema y vuelve a arrancar:
+>
+> ```bash
+> mysql -u root -p -e "DROP DATABASE IF EXISTS technovald; CREATE DATABASE technovald;"
+> ```
 
-No hace falta crearla a mano: la URL de conexión incluye
-`createDatabaseIfNotExist=true`, así que MySQL crea la base de datos en el
-primer arranque. Si prefieres crearla tú:
+MongoDB no necesita creación manual: la base de `MONGO_URI` se crea en el primer documento y los índices se generan con `auto-index-creation`.
 
-```sql
-CREATE DATABASE technovald
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_0900_ai_ci;
-```
+### 4. Arrancar la aplicación
 
-Aquí solo se crea la base de datos vacía: las tablas las versiona Flyway en el
-arranque.
+```bash
+# Linux / macOS
+./mvnw spring-boot:run
 
-### 3. Arrancar la aplicación
-
-```powershell
+# Windows
 .\mvnw.cmd spring-boot:run
 ```
 
-En el primer arranque sobre una base de datos vacía, Flyway aplica la migración
-y se crea el administrador inicial. Un arranque correcto deja, entre otras,
-estas líneas:
+En el arranque verás, en este orden:
 
-```
-HikariPool-1 - Start completed.
-Migrating schema `technovald` to version "1 - init schema"
-Successfully applied 1 migration to schema `technovald`, now at version v1
-=== BOOTSTRAP DE ADMINISTRADOR INICIAL ===
-Administrador inicial creado con username 'admin.technovald'.
-Tomcat started on port 8080 (http)
-```
+1. Flyway aplicando `V1` y `V2` (solo la primera vez).
+2. El administrador inicial, si la tabla `usuario` está vacía.
+3. El mensaje `Started TechNovaLdApplication`.
 
-### 4. Compilar, empaquetar y ejecutar las pruebas
+### 5. Comprobar que está viva
 
-```powershell
-.\mvnw.cmd clean package
-```
+| Recurso | URL |
+|---|---|
+| Swagger UI (documentación interactiva) | <http://localhost:8080/swagger-ui.html> |
+| Especificación OpenAPI (JSON) | <http://localhost:8080/v3/api-docs> |
 
-Debe terminar en `BUILD SUCCESS` y generar `target/app.jar`. La prueba de
-contexto (`TechNovaLdApplicationTests`) arranca la aplicación completa, así que
-**necesita MySQL en marcha**.
+### Perfiles
+
+| Perfil | Activación | Puerto | Correo | Logs |
+|---|---|---|---|---|
+| `dev` | Por defecto (`spring.profiles.default=dev`) | `8080` | Se imprime en consola | SQL y `DEBUG` |
+| `prod` | `SPRING_PROFILES_ACTIVE=prod` | `${PORT:8080}` | Gmail SMTP | `INFO` |
 
 ### Problemas frecuentes
 
-| Síntoma | Causa |
-| --- | --- |
-| `Could not resolve placeholder 'MYSQL_USER'` | falta el fichero `.env` |
-| `Could not resolve placeholder 'JWT_SECRET'` | falta `JWT_SECRET` en `.env` |
-| `WeakKeyException: The signing key's size is ... bits` | `JWT_SECRET` tiene menos de 32 bytes; genera otro |
-| `Communications link failure` | MySQL no está en marcha, o no escucha en el puerto indicado |
-| `Access denied for user` | `MYSQL_USER` o `MYSQL_PASSWORD` incorrectos en `.env` |
-| `Bootstrap de administrador: la tabla usuario está vacía y faltan las credenciales` | la base de datos no tiene usuarios y faltan `BOOTSTRAP_ADMIN_*` en `.env` |
-| `Found non-empty schema ... but no schema history table` | la base de datos ya tenía tablas de antes de que existiera Flyway; hay que vaciarla (`DROP DATABASE technovald;`) y volver a arrancar |
-| `Migration checksum mismatch` | se editó una migración ya aplicada; hay que restaurarla tal cual estaba o recrear la base de datos |
-| `Schema-validation: missing table [...]` o `wrong column type` | una entidad y su tabla no coinciden; hay que corregir la que esté mal |
-| `401` en el login con credenciales que deberían ser correctas | contraseña equivocada, o el usuario está dado de baja (`activo = 0`) |
-| `403` en `/api/admin/empleados` con un token que funciona en otras rutas | el token no es de un usuario con rol `ADMIN` |
+| Síntoma | Causa y solución |
+|---|---|
+| `Communications link failure` | MySQL no está corriendo o el puerto/password del `.env` no coinciden. |
+| `Found non-empty schema ... but no schema history table` | El esquema lo creó Hibernate antes de Flyway. Bórralo y rearranca (ver paso 3). |
+| `Unable to connect to MongoDB` | MongoDB no está levantado, o `MONGO_URI` apunta a otro sitio. |
+| `WeakKeyException` de JJWT | El `JWT_SECRET` no está en Base64 o tiene menos de 256 bits. |
+| `No hay producto en el inventario con EAN...` | El EAN de sincronización no existe en `producto_inventario`. |
+| Error 503 al sincronizar con Icecat | Sin Internet, token inválido o cuota agotada; el resto de la API sigue funcionando. |
+| El correo no sale en `prod` | `GMAIL_USER` / `GMAIL_APP_PASSWORD` incorrectos, o la contraseña de aplicación tiene espacios. |
+| El bootstrap del administrador falla | La tabla `usuario` está vacía y faltan `BOOTSTRAP_ADMIN_USERNAME` o `BOOTSTRAP_ADMIN_PASSWORD`. |
 
-## 🗄️ Base de datos
+### Compilar y ejecutar el JAR
 
-### Migraciones
+```bash
+./mvnw clean package
+java -jar target/app.jar
+```
 
-El esquema lo versiona **Flyway** con los scripts de
-`src/main/resources/db/migration/`. Al arrancar, Flyway consulta la tabla
-`flyway_schema_history` y aplica solo las migraciones que aún no se hayan
-ejecutado, en orden de versión.
+---
 
-| Migración | Contenido |
-| --- | --- |
-| `V1__init_schema.sql` | las 10 tablas del modelo, con sus claves, índices y claves foráneas |
+## 🧪 Cómo ejecutar los tests
 
-Reglas para añadir un cambio de esquema:
+```bash
+# Windows
+.\mvnw.cmd test
 
-- Un cambio nuevo es **un fichero nuevo**: `V2__descripcion.sql`.
-- Una migración ya aplicada **nunca se edita**: Flyway guarda su checksum y
-  aborta el arranque si el fichero cambia.
-- El nombre sigue el patrón `V<número>__<descripción>.sql`, con dos guiones
-  bajos.
-- Los tipos de las columnas se eligen para que coincidan con el mapeo por
-  defecto de Hibernate sobre MySQL, que solo valida el esquema y no lo modifica.
+# Linux / macOS
+./mvnw test
+```
 
-### Entidades
+El proyecto incluye **`TechNovaLdApplicationTests`**, un test de carga de contexto con `@SpringBootTest`. Arranca el contexto real, así que necesita MySQL, MongoDB y el `.env` disponibles; no hay un perfil de test separado.
 
-El esquema está mapeado con JPA. Hibernate **no crea ni modifica tablas**
-(`spring.jpa.hibernate.ddl-auto=validate`): al arrancar solo comprueba que cada
-entidad coincide con la suya y aborta el arranque si encuentra cualquier
-diferencia de tabla, columna o tipo.
+---
 
-| Entidad | Tabla | Qué representa |
-| --- | --- | --- |
-| `Persona` | `persona` | datos de identidad |
-| `Usuario` | `usuario` | credenciales de acceso y rol |
-| `Cliente` | `cliente` | perfil de compra |
-| `Empleado` | `empleado` | perfil laboral |
-| `Proveedor` | `proveedor` | empresa suministradora |
-| `Categoria` | `categoria` | clasificación de productos |
-| `ProductoInventario` | `producto_inventario` | stock y precios de un producto |
-| `Pedido` | `pedido` | cabecera de una venta |
-| `PedidoDetalle` | `pedido_detalle` | línea de un pedido |
-| `SolicitudReposicion` | `solicitud_reposicion` | petición de reposición de stock |
+## 🔑 Administrador inicial y secretos
 
-Relaciones principales:
+**Este repositorio NO debe contener contraseñas reales. Nunca.**
 
-- `Persona` 1:1 con `Usuario`, `Cliente` y `Empleado`. La clave foránea vive en
-  esas tres tablas, así que una persona puede ser cliente, empleado o ambas
-  cosas sin duplicar sus datos.
-- `Cliente` 1:N `Pedido`, y `Pedido` 1:N `PedidoDetalle`.
-- `Categoria` 1:N `ProductoInventario` y `Proveedor` 1:N `ProductoInventario`.
-- `SolicitudReposicion` apunta a un `ProductoInventario`, a un `Proveedor` y al
-  `Empleado` que la creó.
+El único usuario inicial es el **administrador** que crea `AdminBootstrapInitializer` cuando la tabla `usuario` está vacía, a partir de `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD`. Se le asocia una ficha de empleado.
 
-Enums:
+Reglas:
 
-| Enum | Valores |
-| --- | --- |
-| `RolUsuario` | `ADMIN`, `TRABAJADOR`, `CLIENTE` |
-| `EstadoPedido` | `PENDIENTE`, `PROCESANDO`, `ENVIADO`, `ENTREGADO` |
-| `EstadoSolicitud` | `PENDIENTE`, `RECIBIDO` |
+1. **Las contraseñas no se escriben en este documento.** El `.env` de tu máquina contiene las credenciales locales.
+2. **El `.env` está en `.gitignore` y no se versiona.** Contiene `JWT_SECRET`, `MYSQL_PASSWORD`, `GMAIL_APP_PASSWORD` e `ICECAT_TOKEN`. Antes de cualquier `git add`, comprueba que no aparece.
+3. **El bootstrap es fail-fast.** Si la tabla `usuario` está vacía y faltan las variables, la aplicación se niega a arrancar antes que crear un administrador con credenciales por defecto.
+4. **Cambiar o resetear la contraseña invalida todos los JWT anteriores** gracias al contador `token_version`.
+5. **Si alguna vez se filtra una credencial**, rota el secreto correspondiente y cambia la contraseña del usuario afectado.
 
-## 🔐 Autenticación
+---
 
-### Credenciales
+## 🔌 Endpoints de la API
 
-Viven en la tabla `usuario`. La contraseña **nunca se guarda en claro**: se
-almacena su hash BCrypt, que empieza por `$2a$`.
+> Los roles indicados son los que aplica `SecurityConfig`. Todas las rutas cuelgan de `/api`.
 
-Al arrancar, la aplicación mira si la tabla `usuario` está vacía:
+### AuthController
 
-- **Vacía**: crea el administrador inicial con las credenciales de
-  `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD`, le asigna el rol
-  `ADMIN` y lo da de alta también en la tabla `empleado`.
-- **Con usuarios**: no hace nada. El bootstrap es idempotente y nunca
-  sobrescribe datos existentes.
+Base: `/api/auth`
 
-Por eso esas dos variables solo hacen falta en el primer arranque: una vez
-creado el administrador se pueden borrar del `.env`.
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/auth/login` | Público | Body: `LoginRequest` | `AuthResponse` | Autentica y devuelve el JWT y los datos del usuario. |
+| `POST` | `/api/auth/forgot-password` | Público | Body: `ForgotPasswordRequest` | `Void` (`204`) | Genera una contraseña temporal y la envía por email; responde `204` siempre. |
+| `POST` | `/api/auth/change-password` | Autenticado | Body: `ChangePasswordRequest` | `Void` (`204`) | Cambia la contraseña e invalida los tokens anteriores. |
 
-### Inicio de sesión
+### ClienteController
 
-`POST /api/auth/login` es una de las rutas públicas: reparte los tokens. Recibe
-el usuario y la contraseña y, si son correctos, devuelve:
+Base: `/api/clientes`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/clientes/register` | Público | Body: `ClienteRegistroRequest` | `ClienteRegistroResponse` | Registra un cliente y devuelve credenciales y token; `201`. |
+| `GET` | `/api/clientes/me` | Autenticado (CLIENTE) | — | `ClienteResponse` | Perfil del cliente autenticado. |
+| `PUT` | `/api/clientes/me` | Autenticado (CLIENTE) | Body: `ClienteUpdateRequest` | `ClienteResponse` | Actualiza email, teléfono y dirección. |
+
+### AdminClienteController
+
+Base: `/api/admin/clientes`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/admin/clientes` | ADMIN / TRABAJADOR | Query: `page`, `size` | `PaginaResponse<ClienteAdminResponse>` | Directorio paginado; 10 por defecto. |
+| `GET` | `/api/admin/clientes/{id}` | ADMIN / TRABAJADOR | Path: `id` | `ClienteAdminResponse` | Detalle de un cliente. |
+| `PUT` | `/api/admin/clientes/{id}` | ADMIN / TRABAJADOR | Path: `id`; Body: `ClienteUpdateRequest` | `ClienteAdminResponse` | Actualiza los datos de contacto. |
+| `DELETE` | `/api/admin/clientes/{id}` | ADMIN / TRABAJADOR | Path: `id` | `Void` (`204`) | Baja lógica. |
+| `PATCH` | `/api/admin/clientes/{id}/reactivar` | ADMIN / TRABAJADOR | Path: `id` | `Void` (`204`) | Reactiva el cliente. |
+
+La edición solo cambia email, teléfono y dirección; nombre, apellidos y DNI son inmutables.
+
+### AdminEmpleadoController
+
+Base: `/api/admin/empleados`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/admin/empleados` | ADMIN | Body: `EmpleadoRegistroRequest` | `EmpleadoRegistroResponse` | Alta de empleado; devuelve credenciales; `201`. |
+| `GET` | `/api/admin/empleados` | ADMIN | — | `List<EmpleadoResponse>` | Directorio completo. |
+| `GET` | `/api/admin/empleados/{id}` | ADMIN | Path: `id` | `EmpleadoResponse` | Detalle de un empleado. |
+| `PUT` | `/api/admin/empleados/{id}` | ADMIN | Path: `id`; Body: `EmpleadoUpdateRequest` | `EmpleadoResponse` | Edita datos y rol; DNI y username son inmutables. |
+| `DELETE` | `/api/admin/empleados/{id}` | ADMIN | Path: `id` | `Void` (`204`) | Baja lógica. |
+| `PATCH` | `/api/admin/empleados/{id}/reactivar` | ADMIN | Path: `id` | `Void` (`204`) | Reactiva el empleado. |
+| `POST` | `/api/admin/empleados/{id}/reset-password` | ADMIN | Path: `id` | `EmpleadoRegistroResponse` | Resetea la contraseña y devuelve la temporal. |
+
+### AdminCategoriaController
+
+Base: `/api/admin/categorias`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/admin/categorias` | ADMIN / TRABAJADOR | — | `List<CategoriaResponse>` | Lista de categorías (activas e inactivas). |
+| `POST` | `/api/admin/categorias` | ADMIN | Body: `CategoriaRequest` | `CategoriaResponse` | Crea una categoría; `201`. |
+| `PUT` | `/api/admin/categorias/{id}` | ADMIN | Path: `id`; Body: `CategoriaRequest` | `CategoriaResponse` | Actualiza nombre y descripción. |
+| `DELETE` | `/api/admin/categorias/{id}` | ADMIN | Path: `id` | `Void` (`204`) | Baja lógica. |
+| `PATCH` | `/api/admin/categorias/{id}/reactivar` | ADMIN | Path: `id` | `Void` (`204`) | Reactiva la categoría. |
+
+### AdminProveedorController
+
+Base: `/api/admin/proveedores`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/admin/proveedores` | ADMIN / TRABAJADOR | — | `List<ProveedorResponse>` | Lista completa de proveedores. |
+| `GET` | `/api/admin/proveedores/active` | ADMIN / TRABAJADOR | — | `List<ProveedorResponse>` | Solo proveedores activos. |
+| `POST` | `/api/admin/proveedores` | ADMIN | Body: `ProveedorRequest` | `ProveedorResponse` | Crea un proveedor; `201`. |
+| `PUT` | `/api/admin/proveedores/{id}` | ADMIN | Path: `id`; Body: `ProveedorRequest` | `ProveedorResponse` | Actualiza los datos. |
+| `DELETE` | `/api/admin/proveedores/{id}` | ADMIN | Path: `id` | `Void` (`204`) | Baja lógica. |
+| `PATCH` | `/api/admin/proveedores/{id}/reactivar` | ADMIN | Path: `id` | `Void` (`204`) | Reactiva el proveedor. |
+
+### AdminInventarioController
+
+Base: `/api/admin/inventario`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/admin/inventario` | ADMIN / TRABAJADOR | — | `List<ProductoInventarioResponse>` | Todos los productos (activos e inactivos). |
+| `GET` | `/api/admin/inventario/low-stock` | ADMIN / TRABAJADOR | — | `List<ProductoInventarioResponse>` | Activos con stock ≤ mínimo. |
+| `POST` | `/api/admin/inventario` | ADMIN | Body: `ProductoInventarioRequest` | `ProductoInventarioResponse` | Crea un producto; `201`. |
+| `PUT` | `/api/admin/inventario/{id}` | ADMIN | Path: `id`; Body: `ProductoInventarioRequest` | `ProductoInventarioResponse` | Edita datos; EAN y stock no se cambian por esta vía. |
+| `PATCH` | `/api/admin/inventario/{id}/stock` | ADMIN / TRABAJADOR | Path: `id`; Body: `ProductoInventarioAjusteRequest` | `ProductoInventarioResponse` | Ajusta el stock sumando o restando `cantidad`. |
+| `DELETE` | `/api/admin/inventario/{id}` | ADMIN | Path: `id` | `Void` (`204`) | Baja lógica. |
+| `PATCH` | `/api/admin/inventario/{id}/reactivar` | ADMIN | Path: `id` | `Void` (`204`) | Reactiva el producto. |
+
+El ajuste de stock acepta cantidades positivas o negativas; si el stock resultante sería negativo, responde `400`.
+
+### CatalogoController
+
+Base: `/api/catalogo`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/catalogo` | Público | — | `List<ProductoCatalogoResumenResponse>` | Listado ligero de fichas activas. |
+| `GET` | `/api/catalogo/{ean}` | Público | Path: `ean` | `ProductoCatalogoDetalleResponse` | Detalle completo: descripciones, galería, especificaciones y reseñas. |
+
+El detalle responde `404` si la ficha no está activa. El listado no pagina.
+
+### AdminCatalogoController
+
+Base: `/api/admin/catalogo`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/admin/catalogo` | ADMIN | Body: `ProductoCatalogoRequest` | `ProductoCatalogoDetalleResponse` | Crea o actualiza una ficha manualmente. |
+| `POST` | `/api/admin/catalogo/sync/{ean}` | ADMIN | Path: `ean` | `ProductoCatalogoDetalleResponse` | Sincroniza una ficha desde Icecat; el EAN debe existir en inventario. |
+| `POST` | `/api/admin/catalogo/sync` | ADMIN | — | `SincronizacionResponse` | Sincroniza todo el inventario y devuelve el resumen. |
+
+### PedidoController
+
+Base: `/api/pedidos`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/pedidos` | CLIENTE | Body: `PedidoRequest` | `PedidoResponse` | Crea un pedido desde `detalles`; descuenta stock de forma atómica; `201`. |
+| `GET` | `/api/pedidos/me` | CLIENTE | Query: `page`, `size` | `PaginaResponse<PedidoResponse>` | Pedidos del cliente autenticado; 20 por defecto. |
+| `GET` | `/api/pedidos` | ADMIN / TRABAJADOR | Query: `page`, `size` | `PaginaResponse<PedidoResponse>` | Todos los pedidos; 20 por defecto. |
+| `PUT` | `/api/pedidos/{id}/estado` | ADMIN / TRABAJADOR | Path: `id`; Query: `nuevoEstado` (`EstadoPedido`) | `PedidoResponse` | Avanza el estado; solo el ciclo lineal. |
+
+`nuevoEstado` acepta `PROCESANDO`, `ENVIADO` y `ENTREGADO`. Las transiciones son `PENDIENTE → PROCESANDO → ENVIADO → ENTREGADO`; no se puede saltar ni retroceder.
+
+### ComentarioController
+
+Base: `/api/comentarios`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/comentarios/producto/{productoInventarioId}` | Público | Path: `productoInventarioId` | `List<ComentarioResponse>` | Reseñas activas de un producto. |
+| `POST` | `/api/comentarios` | CLIENTE | Body: `ComentarioRequest` | `ComentarioResponse` | Publica una reseña; `201`. |
+| `GET` | `/api/comentarios/pendientes` | ADMIN / TRABAJADOR | — | `List<ComentarioPendienteResponse>` | Bandeja de reseñas sin respuesta oficial. |
+| `PUT` | `/api/comentarios/{comentarioId}/responder` | ADMIN / TRABAJADOR | Path: `comentarioId` (UUID); Body: `RespuestaComentarioRequest` | `ComentarioResponse` | Respuesta oficial. |
+
+`productoInventarioId` es el id de MySQL, no el EAN. El detalle del catálogo incluye las reseñas activas y su respuesta.
+
+### SolicitudReposicionController
+
+Base: `/api/solicitudes`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `POST` | `/api/solicitudes` | ADMIN / TRABAJADOR | Body: `SolicitudReposicionRequest` | `SolicitudReposicionResponse` | Crea una solicitud para el empleado del JWT; `201`. |
+| `PUT` | `/api/solicitudes/{id}/recibir` | ADMIN / TRABAJADOR | Path: `id` | `SolicitudReposicionResponse` | Pasa a `RECIBIDO` y suma el stock en una transacción. |
+| `GET` | `/api/solicitudes` | ADMIN / TRABAJADOR | Query: `estado` (`EstadoSolicitud`, opcional) | `List<SolicitudReposicionResponse>` | Lista activas; filtro `PENDIENTE` o `RECIBIDO`. |
+
+El usuario autenticado debe tener ficha de empleado; el administrador inicial la tiene. La recepción es atómica: si el stock no se actualiza, la transacción revierte el estado.
+
+### DTOs de entrada y salida
+
+**DTOs de entrada**
+
+| DTO | Campos |
+|---|---|
+| `LoginRequest` | `username`, `password` |
+| `ForgotPasswordRequest` | `email` |
+| `ChangePasswordRequest` | `currentPassword`, `newPassword` |
+| `ClienteRegistroRequest` | `nombre`, `apellido`, `dni`, `email`, `telefono`, `direccion` |
+| `ClienteUpdateRequest` | `email`, `telefono`, `direccion` |
+| `EmpleadoRegistroRequest` | `nombre`, `apellido`, `dni`, `email`, `telefono`, `direccion`, `rol` (`RolUsuario`) |
+| `EmpleadoUpdateRequest` | `nombre`, `apellido`, `email`, `telefono`, `direccion`, `rol` (`RolUsuario`) |
+| `CategoriaRequest` | `nombre`, `descripcion` |
+| `ProveedorRequest` | `nombreEmpresa`, `cif`, `contacto`, `telefono`, `email`, `direccion` |
+| `ProductoInventarioRequest` | `ean`, `nombreCorto`, `stockActual`, `stockMinimo`, `precioCompra`, `precioVenta`, `marca`, `categoriaId`, `proveedorId` |
+| `ProductoInventarioAjusteRequest` | `cantidad` |
+| `ProductoCatalogoRequest` | `ean`, `titulo`, `nombreCorto`, `marca`, `categoria`, `descripcionCorta`, `descripcionLarga`, `imagenes` (`List<String>`), `especificaciones` (`Map<String,String>`), `activo` |
+| `PedidoRequest` | `detalles` (`List<DetallePedidoRequest>`) |
+| `DetallePedidoRequest` | `productoId`, `cantidad` |
+| `ComentarioRequest` | `productoInventarioId`, `texto`, `valoracion` |
+| `RespuestaComentarioRequest` | `respuestaOficial` |
+| `SolicitudReposicionRequest` | `productoId`, `proveedorId`, `cantidad` |
+
+**DTOs de salida**
+
+| DTO | Campos |
+|---|---|
+| `AuthResponse` | `token`, `username`, `rol`, `expiracion` |
+| `ClienteRegistroResponse` | `id`, `nombre`, `apellido`, `username`, `passwordInicial`, `rol`, `token` |
+| `ClienteResponse` | `id`, `nombre`, `apellido`, `email`, `telefono`, `direccion`, `activo` |
+| `ClienteAdminResponse` | `id`, `nombre`, `apellido`, `email`, `telefono`, `direccion`, `username`, `activo` |
+| `EmpleadoRegistroResponse` | `id`, `nombre`, `apellido`, `username`, `passwordInicial`, `rol` |
+| `EmpleadoResponse` | `id`, `nombre`, `apellido`, `email`, `telefono`, `direccion`, `username`, `rol`, `activo` |
+| `CategoriaResponse` | `id`, `nombre`, `descripcion`, `activo` |
+| `ProveedorResponse` | `id`, `nombreEmpresa`, `cif`, `contacto`, `telefono`, `email`, `direccion`, `activo` |
+| `ProductoInventarioResponse` | `id`, `ean`, `nombreCorto`, `stockActual`, `stockMinimo`, `precioCompra`, `precioVenta`, `marca`, `categoriaId`, `categoriaNombre`, `proveedorId`, `proveedorNombre`, `activo` |
+| `ProductoCatalogoResumenResponse` | `id`, `ean`, `nombreCorto`, `marca`, `categoria`, `precioVenta`, `stockActual`, `disponible`, `imagenPrincipalUrl` |
+| `ProductoCatalogoDetalleResponse` | `id`, `ean`, `titulo`, `nombreCorto`, `marca`, `categoria`, `descripcionCorta`, `descripcionLarga`, `imagenes`, `especificaciones`, `comentarios`, `precioVenta`, `stockActual`, `disponible`, `fechaSincronizacion`, `activo` |
+| `ImagenResponse` | `urlAlta`, `urlMedia`, `esPrincipal` |
+| `EspecificacionGrupo` / `EspecificacionItem` | Tipos anidados del detalle: `grupo`, `items`; `nombre`, `valor` |
+| `ComentarioResponse` | `id`, `clienteId`, `nombreCliente`, `texto`, `valoracion`, `fechaCreacion`, `respuestaOficial`, `nombreRespondedor`, `usernameRespondedor`, `fechaRespuesta` |
+| `ComentarioPendienteResponse` | `comentarioId`, `productoEan`, `productoId`, `productoTitulo`, `nombreCliente`, `texto`, `valoracion`, `fechaCreacion` |
+| `SincronizacionResponse` | `total`, `sincronizados`, `fallidos`, `errores` |
+| `PedidoResponse` | `id`, `fechaPedido`, `estado`, `total`, `nombreCliente`, `detalles` |
+| `DetallePedidoResponse` | `id`, `nombreProducto`, `marcaProducto`, `cantidad`, `precioUnitario`, `subtotal` |
+| `SolicitudReposicionResponse` | `id`, `fechaSolicitud`, `cantidad`, `estado`, `nombreProducto`, `nombreProveedor`, `nombreEmpleado` |
+| `PaginaResponse<T>` | `contenido`, `pagina`, `tamano`, `totalElementos`, `totalPaginas` |
+
+### Formato de error
+
+Los errores de negocio y validación usan un cuerpo uniforme:
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzM4NCJ9...",
-  "username": "admin.technovald",
-  "rol": "ADMIN",
-  "expiracion": "2026-10-09T21:30:00"
-}
-```
-
-El token es un **JWT firmado en HMAC-SHA** con la clave de `JWT_SECRET`, lleva
-el nombre de usuario como sujeto, el rol y la versión de credenciales vigente,
-y caduca a los `JWT_EXPIRATION` milisegundos. No se guarda en ningún sitio: lo
-que permite comprobar que lo emitió esta aplicación, y que nadie lo ha tocado,
-es la firma.
-
-### Peticiones autenticadas
-
-El resto de rutas exigen el token en la cabecera `Authorization`:
-
-```
-Authorization: Bearer eyJhbGciOiJIUzM4NCJ9...
-```
-
-En cada petición, el filtro comprueba la firma, vuelve a cargar el usuario de la
-base de datos y deja la petición autenticada. Si el token falta, está
-manipulado, ha caducado, o su usuario ya no existe o está dado de baja, la
-respuesta es **401**.
-
-El rol se comprueba solo en las rutas que lo exigen. Hoy hay una: la gestión de
-empleados (`/api/admin/empleados/**`), reservada a `ADMIN`. Con un token válido
-de `TRABAJADOR` o de `CLIENTE` la respuesta es **403**: el 401 dice "no sé
-quién eres"; el 403, "sé quién eres, pero no puedes pasar".
-
-## 🧾 Registro de clientes
-
-`POST /api/clientes/register` es la segunda ruta pública de la API: da de alta
-a un cliente que todavía no tiene credenciales. No recibe usuario ni
-contraseña; recibe los datos personales y el sistema genera las credenciales.
-
-### Qué se crea
-
-En una sola transacción se persisten tres filas:
-
-| Tabla | Qué se guarda |
-| --- | --- |
-| `persona` | nombre, apellido, DNI, email, teléfono y dirección |
-| `usuario` | username generado, hash BCrypt de la contraseña generada y rol `CLIENTE` |
-| `cliente` | el perfil de compra, enlazado con su persona |
-
-Si algo falla a mitad, no queda ninguna de las tres: o se crea el cliente
-completo, o no se crea nada.
-
-### Cómo se generan las credenciales
-
-- **Username**: `nombre.apellido`, en minúsculas, sin acentos y solo con
-  `[a-z0-9]` (José García → `jose.garcia`). Si ese username ya está ocupado se
-  prueba `jose.garcia1`, `jose.garcia2`… hasta 1000 candidatos.
-- **Contraseña**: 16 caracteres aleatorios (criptográficamente seguros) con al
-  menos una mayúscula, una minúscula, un dígito y un símbolo **garantizados por
-  construcción**, no por probabilidad. Se excluyen los caracteres ambiguos
-  (`I`, `O`, `l`, `0`, `1`) y los que rompen JSON, HTML, shell o `.env`
-  (comillas, barras, `< > &`, `$`).
-- **Hash**: en la tabla `usuario` solo se guarda el hash BCrypt. La contraseña
-  en claro se devuelve **una sola vez**, en la respuesta del alta, y no se
-  escribe en ningún log.
-
-La política (longitud 16, 1000 intentos de username) vive en las constantes de
-`CredentialGenerator`: son valores fijos del sistema, no configurables, porque
-ningún entorno necesita hoy otros distintos.
-
-### Respuesta — `201 Created`
-
-```json
-{
-  "id": 2,
-  "nombre": "Lucia",
-  "apellido": "Garcia Perez",
-  "username": "lucia.garcia",
-  "passwordInicial": "7N8u*yT-nY**%mCv",
-  "rol": "CLIENTE",
-  "token": "eyJhbGciOiJIUzM4NCJ9..."
-}
-```
-
-El `token` es un JWT con la misma forma que el del login, así que el cliente
-queda autenticado nada más registrarse, sin pasar por
-`POST /api/auth/login` (aunque puede hacerlo: las credenciales funcionan).
-
-La respuesta **no** lleva cabecera `Location`: no hay ningún endpoint que
-consulte un cliente por su id, y apuntar a una ruta que responde 404 sería peor
-que no apuntar a ninguna. El cliente recién creado ya puede consultar su propio
-perfil en `GET /api/clientes/me`, que toma el id del token y no de la URL.
-
-### Reglas de negocio
-
-| Caso | Respuesta |
-| --- | --- |
-| DNI ya registrado | **400** `Ya existe una persona registrada con el DNI indicado` |
-| Email ya registrado | **400** `Ya existe una persona registrada con el email indicado` |
-| DNI con formato inválido, campos vacíos o email ilegible | **400** con `campo: motivo` por cada campo |
-| Cuerpo ausente o JSON roto | **400** `El cuerpo de la petición no es un JSON válido o está vacío` |
-
-Todos los errores llegan con el formato uniforme de la sección siguiente.
-
-## 👤 Perfil del cliente
-
-`GET /api/clientes/me` y `PUT /api/clientes/me` son las dos rutas con las que un
-cliente consulta y actualiza sus propios datos. Ninguna lleva el id en la URL:
-el cliente se identifica con el token que valida el `JwtAuthenticationFilter`,
-así que no puede pedir el perfil de otro ni intentarlo.
-
-### Consultar el perfil — `200 OK`
-
-| Campo | Valor |
-| --- | --- |
-| Método | `GET` |
-| URL | `http://localhost:8080/api/clientes/me` |
-| Headers | `Authorization: Bearer <TOKEN>` |
-
-```json
-{
-  "id": 1,
-  "nombre": "Lucia",
-  "apellido": "Garcia Perez",
-  "email": "lucia.garcia@technovald.test",
-  "telefono": "600111222",
-  "direccion": "Calle Prueba 1",
-  "activo": true
-}
-```
-
-El DNI no aparece: es la clave de identidad de la persona y la API no la expone
-en ninguna respuesta. El alta de cliente tampoco lo devuelve.
-
-### Actualizar los datos de contacto — `200 OK`
-
-```json
-{
-  "email": "lucia.nueva@technovald.test",
-  "telefono": "600999888",
-  "direccion": "Avenida Nueva 42"
-}
-```
-
-Solo se pueden cambiar esos tres campos. El **nombre, el apellido y el DNI no
-son editables por esta vía**: no están en el DTO de entrada, así que enviarlos
-no tiene ningún efecto. Un cambio de nombre o de DNI no es una actualización de
-perfil, es un cambio de identidad, y esta operación no lo cubre.
-
-El email se guarda en minúsculas, y el teléfono y la dirección sin espacios
-sobrantes. La respuesta es el perfil ya actualizado, con la misma forma que la
-consulta, así que no hace falta volver a consultarlo.
-
-### Reglas de negocio
-
-| Caso | Respuesta |
-| --- | --- |
-| El token identifica a un usuario sin perfil de cliente (un administrador o un trabajador) | **404** `El usuario autenticado no tiene un perfil de cliente activo` |
-| El email nuevo ya pertenece a otra persona | **400** `Ya existe otra persona registrada con el email indicado` |
-| El email no tiene formato válido, o el teléfono o la dirección van vacíos | **400** con `campo: motivo` por cada campo |
-| Sin token, o con un token inválido o caducado | **401** |
-
-Las dos consultas buscan solo perfiles con `activo = 1`: un `cliente` dado de
-baja responde 404, igual que si no existiera. Y como el email es único en toda
-la tabla `persona`, reenviar el propio email no choca consigo mismo, aunque
-venga en mayúsculas.
-
-El cliente solo puede leer y editar **su** fila: el username sale del token,
-nunca de un id que venga en la petición.
-
-## 🧑‍💼 Gestión de empleados (solo ADMIN)
-
-`POST /api/admin/empleados`, `GET /api/admin/empleados` y
-`GET /api/admin/empleados/{id}` son las rutas con las que el administrador da
-de alta al personal y consulta el directorio. Las tres exigen un token con rol
-`ADMIN`: con un token de `CLIENTE` o de `TRABAJADOR` la respuesta es **403**, y
-sin token, **401**.
-
-### Qué se crea
-
-En una sola transacción se persisten tres filas:
-
-| Tabla | Qué se guarda |
-| --- | --- |
-| `persona` | nombre, apellido, DNI, email, teléfono y dirección |
-| `usuario` | username generado, hash BCrypt de la contraseña generada y el rol recibido (`ADMIN` o `TRABAJADOR`) |
-| `empleado` | el perfil laboral, enlazado con su persona y con el mismo rol |
-
-El rol queda en dos sitios a propósito: `usuario.rol` es el que lee el filtro
-del token para autorizar cada petición, y `empleado.rol` permite consultar el
-sub-rol del empleado sin hacer un `JOIN` contra `usuario`. El alta escribe el
-mismo valor en los dos, así que no pueden divergir.
-
-Si algo falla a mitad, no queda ninguna de las tres: o se crea el empleado
-completo, o no se crea nada.
-
-### Cómo se generan las credenciales
-
-Son las mismas reglas que en el alta de clientes (`CredentialGenerator`):
-`nombre.apellido` en minúsculas y sin acentos, con sufijo numérico si el
-username ya está ocupado, y una contraseña de 16 caracteres que garantiza
-mayúscula, minúscula, dígito y símbolo. En la base de datos solo queda el hash
-BCrypt; la contraseña en claro se devuelve **una sola vez**, en la respuesta del
-alta, para que el administrador se la entregue al empleado.
-
-### Alta — `201 Created`
-
-**Request**: `POST http://localhost:8080/api/admin/empleados` con
-`Authorization: Bearer <TOKEN>` y `Content-Type: application/json`:
-
-```json
-{
-  "nombre": "Pablo",
-  "apellido": "Sanz Gil",
-  "dni": "87654321X",
-  "email": "pablo.sanz@technovald.test",
-  "telefono": "600555666",
-  "direccion": "Calle Empleado 1",
-  "rol": "TRABAJADOR"
-}
-```
-
-**Response**:
-
-```json
-{
-  "id": 2,
-  "nombre": "Pablo",
-  "apellido": "Sanz Gil",
-  "username": "pablo.sanz",
-  "passwordInicial": "+-QnysaDvU2?LG_4",
-  "rol": "TRABAJADOR"
-}
-```
-
-La respuesta **no** lleva token: quien crea la cuenta es el administrador, que
-ya está autenticado, y el token lo pide el empleado al hacer login con las
-credenciales que se le entregan. Sí lleva la cabecera
-`Location: /api/admin/empleados/2`, que apunta a la consulta por id.
-
-### Consultar el directorio — `200 OK`
-
-`GET /api/admin/empleados` devuelve todos los empleados ordenados por id,
-incluido el administrador que creó el bootstrap:
-
-```json
-[
-  {
-    "id": 1,
-    "nombre": "Admin",
-    "apellido": "TechNovaLD",
-    "email": "admin.technovald@technovald.local",
-    "telefono": "600000000",
-    "direccion": "Bootstrap",
-    "username": "admin.technovald",
-    "rol": "ADMIN",
-    "activo": true
-  },
-  {
-    "id": 2,
-    "nombre": "Pablo",
-    "apellido": "Sanz Gil",
-    "email": "pablo.sanz@technovald.test",
-    "telefono": "600555666",
-    "direccion": "Calle Empleado 1",
-    "username": "pablo.sanz",
-    "rol": "TRABAJADOR",
-    "activo": true
-  }
-]
-```
-
-`GET /api/admin/empleados/{id}` devuelve ese mismo objeto para un id concreto, y
-**404** con el formato uniforme si el id no existe.
-
-### Reglas de negocio
-
-| Caso | Respuesta |
-| --- | --- |
-| DNI ya registrado | **400** `Ya existe una persona registrada con el DNI indicado` |
-| Email ya registrado | **400** `Ya existe una persona registrada con el email indicado` |
-| Rol `CLIENTE` | **400** `El empleado solo puede tener los roles ADMIN o TRABAJADOR` |
-| Rol ausente, DNI con formato inválido, campos vacíos o email ilegible | **400** con `campo: motivo` por cada campo |
-| Id inexistente | **404** `Empleado no encontrado con id: <id>` |
-| Sin token, o con un token inválido o caducado | **401** |
-| Token válido de `CLIENTE` o de `TRABAJADOR` | **403** |
-
-Un cliente no puede darse de alta como empleado: su DNI y su email ya están en
-la tabla `persona`, así que el alta responde **400** con el mensaje de duplicado
-que corresponda.
-
-## ⚠️ Formato de error uniforme
-
-Todas las respuestas de error de la API siguen la misma estructura, definida
-por el `record` anidado `GlobalExceptionHandler.ErrorResponse`:
-
-```json
-{
-  "timestamp": "2026-10-11T12:28:02.623386",
-  "status": 401,
-  "error": "Unauthorized",
-  "message": "Credenciales inválidas",
-  "path": "/api/auth/login"
-}
-```
-
-### Traducción de excepciones a códigos HTTP
-
-| Excepción | Status | Cuándo se lanza |
-| --- | --- | --- |
-| `ResourceNotFoundException` | **404** | Recurso no encontrado o inactivo |
-| `BusinessRuleException` | **400** | Regla de negocio infringida |
-| `MethodArgumentNotValidException` | **400** | Validación de DTO con `@Valid` fallida |
-| `AuthenticationException` | **401** | Credenciales incorrectas en el login |
-| `HttpMessageNotReadableException` | **400** | JSON ilegible o cuerpo ausente |
-| `NoResourceFoundException` | **404** | Ruta inexistente |
-| Excepciones de Spring MVC | **su status** | 405, 415, 400... respetados |
-| Cualquier otra | **500** | Error interno con mensaje genérico |
-
-### Nota sobre los 401 y 403 de la cadena de filtros
-
-Los **401 que devuelve el `JwtAuthenticationFilter`** (token ausente,
-manipulado o caducado) y los **403 de la autorización por rol** (token válido
-de un rol que no es el exigido) **no pasan por el `GlobalExceptionHandler`**:
-Spring Security resuelve la petición antes de que llegue al `DispatcherServlet`.
-Unos y otros se devuelven **sin cuerpo**. Los 401 del login (credenciales
-incorrectas), en cambio, sí pasan por el handler y llevan el formato uniforme.
-
-El 403 lo escribe un `AccessDeniedHandler` de la propia `SecurityConfig`, que
-solo fija el código de estado. Sin él, Spring Security haría `sendError` y la
-respuesta llevaría el cuerpo de error por defecto de Spring Boot, distinto del
-uniforme de la API.
-
-## 🧪 Probar la API con Postman
-
-Las pruebas se hacen con **Postman** (o cualquier cliente HTTP).
-
-### Reglas generales
-
-- En **todas** las peticiones: pestaña **`Authorization` → `No Auth`**.
-- El token se manda **siempre en la cabecera `Authorization` manual**, no en la
-  pestaña de Authorization de Postman.
-- `<TOKEN>` = el `token` que devuelve la prueba 1.
-- `<TOKEN_CLIENTE>` = el `token` que devuelve la prueba 4 (registro).
-- `<ID>` = el `id` que devuelve la prueba 14 (en el ejemplo, `2`).
-
-### 1. Login correcto → 200 + token
-
-**Request**: `POST http://localhost:8080/api/auth/login` con
-`Content-Type: application/json` y body:
-
-```json
-{ "username": "admin.technovald", "password": "admin" }
-```
-
-**Response** — `200 OK` con `token`, `username`, `rol`, `expiracion`.
-
-### 2. Sin token → 401 (vacío)
-
-**Request**: `GET http://localhost:8080/`, sin Authorization.
-
-**Response** — `401 Unauthorized`, sin body.
-
-### 3. Con token válido → 404 (formato uniforme)
-
-**Request**: `GET http://localhost:8080/` con `Authorization: Bearer <TOKEN>`.
-
-**Response** — `404 Not Found` con `"message": "El endpoint solicitado no existe: /"`.
-
-### 4. Registro correcto → 201
-
-**Request**: `POST http://localhost:8080/api/clientes/register` con
-`Content-Type: application/json` y body:
-
-```json
-{
-  "nombre": "Lucia",
-  "apellido": "Garcia Perez",
-  "dni": "12345678Z",
-  "email": "lucia.garcia@technovald.test",
-  "telefono": "600111222",
-  "direccion": "Calle Prueba 1"
-}
-```
-
-**Response** — `201 Created` con `id`, `nombre`, `apellido`, `username`,
-`passwordInicial`, `rol` y `token`.
-
-### 5. DNI repetido → 400
-
-**Request**: mismo DNI, otro email.
-
-**Response** — `400 Bad Request` con `"message": "Ya existe una persona registrada con el DNI indicado"`.
-
-### 6. Email repetido → 400
-
-**Request**: otro DNI, mismo email.
-
-**Response** — `400 Bad Request` con `"message": "Ya existe una persona registrada con el email indicado"`.
-
-### 7. Username con sufijo → 201
-
-**Request**: mismos nombre y apellido, otros DNI y email.
-
-**Response** — `201 Created` con `"username": "lucia.garcia1"`.
-
-### 8. Login con las credenciales generadas → 200
-
-**Request**: `POST /api/auth/login` con el `username` y la `passwordInicial` de la prueba 4.
-
-**Response** — `200 OK` con `"rol": "CLIENTE"`.
-
-### 9. Datos inválidos → 400
-
-**Request**: con campos vacíos, DNI inválido y email ilegible.
-
-**Response** — `400 Bad Request` con `message` que une los errores de todos los
-campos con formato `campo: motivo`.
-
-### 10. Mi perfil con el token del cliente → 200
-
-**Request**: `GET http://localhost:8080/api/clientes/me` con
-`Authorization: Bearer <TOKEN_CLIENTE>`.
-
-**Response** — `200 OK` con `id`, `nombre`, `apellido`, `email`, `telefono`,
-`direccion` y `activo`. No hay campo `dni`.
-
-### 11. Actualizar mis datos → 200
-
-**Request**: `PUT http://localhost:8080/api/clientes/me` con el token del cliente.
-
-```json
-{ "email": "lucia.nueva@technovald.test", "telefono": "600999888", "direccion": "Avenida Nueva 42" }
-```
-
-**Response** — `200 OK` con el perfil ya actualizado. Enviar además `"nombre"` o
-`"dni"` no cambia nada: no están en el DTO de entrada.
-
-### 12. Email de otra persona → 400
-
-**Request**: mismo `PUT`, con el email de otro cliente ya registrado.
-
-**Response** — `400 Bad Request` con `"message": "Ya existe otra persona registrada con el email indicado"`.
-
-### 13. Sin token y con token que no es de un cliente
-
-- `GET /api/clientes/me` sin cabecera `Authorization` → **401**, sin body.
-- `GET /api/clientes/me` con el token del administrador → **404** con
-  `"message": "El usuario autenticado no tiene un perfil de cliente activo"`.
-
-### 14. Alta de empleado (TRABAJADOR) → 201
-
-**Request**: `POST http://localhost:8080/api/admin/empleados` con
-`Authorization: Bearer <TOKEN>`, `Content-Type: application/json` y body:
-
-```json
-{
-  "nombre": "Pablo",
-  "apellido": "Sanz Gil",
-  "dni": "87654321X",
-  "email": "pablo.sanz@technovald.test",
-  "telefono": "600555666",
-  "direccion": "Calle Empleado 1",
-  "rol": "TRABAJADOR"
-}
-```
-
-**Response** — `201 Created` con `id`, `nombre`, `apellido`, `username`,
-`passwordInicial` y `rol`, y cabecera `Location: /api/admin/empleados/<ID>`. No
-incluye `token`.
-
-```json
-{
-  "id": 2,
-  "nombre": "Pablo",
-  "apellido": "Sanz Gil",
-  "username": "pablo.sanz",
-  "passwordInicial": "+-QnysaDvU2?LG_4",
-  "rol": "TRABAJADOR"
-}
-```
-
-Guardar el `username` y la `passwordInicial`: los usa la prueba 15.
-
-### 15. Login con las credenciales del empleado → 200
-
-**Request**: `POST http://localhost:8080/api/auth/login` con el `username` y la
-`passwordInicial` exactos de la prueba 14.
-
-```json
-{ "username": "pablo.sanz", "password": "+-QnysaDvU2?LG_4" }
-```
-
-**Response** — `200 OK` con `token`, `username`, `rol` y `expiracion`, y
-`"rol": "TRABAJADOR"`. El empleado ya puede autenticarse con las credenciales
-que le entregó el administrador.
-
-### 16. Directorio de empleados → 200
-
-**Request**: `GET http://localhost:8080/api/admin/empleados` con
-`Authorization: Bearer <TOKEN>`.
-
-**Response** — `200 OK` con un array JSON. Tienen que aparecer el administrador
-(`admin.technovald`) y el empleado recién creado (`pablo.sanz`).
-
-```json
-[
-  {
-    "id": 1,
-    "nombre": "Admin",
-    "apellido": "TechNovaLD",
-    "email": "admin.technovald@technovald.local",
-    "telefono": "600000000",
-    "direccion": "Bootstrap",
-    "username": "admin.technovald",
-    "rol": "ADMIN",
-    "activo": true
-  },
-  {
-    "id": 2,
-    "nombre": "Pablo",
-    "apellido": "Sanz Gil",
-    "email": "pablo.sanz@technovald.test",
-    "telefono": "600555666",
-    "direccion": "Calle Empleado 1",
-    "username": "pablo.sanz",
-    "rol": "TRABAJADOR",
-    "activo": true
-  }
-]
-```
-
-### 17. Empleado por id → 200 / 404
-
-#### 17.1 Empleado existente → 200
-
-**Request**: `GET http://localhost:8080/api/admin/empleados/<ID>` con
-`Authorization: Bearer <TOKEN>` (el id de la prueba 14).
-
-**Response** — `200 OK` con los datos de Pablo, incluidos `username`, `rol` y
-`activo`.
-
-```json
-{
-  "id": 2,
-  "nombre": "Pablo",
-  "apellido": "Sanz Gil",
-  "email": "pablo.sanz@technovald.test",
-  "telefono": "600555666",
-  "direccion": "Calle Empleado 1",
-  "username": "pablo.sanz",
-  "rol": "TRABAJADOR",
-  "activo": true
-}
-```
-
-#### 17.2 Empleado inexistente → 404
-
-**Request**: `GET http://localhost:8080/api/admin/empleados/99999999` con
-`Authorization: Bearer <TOKEN>`.
-
-**Response** — `404 Not Found` con el formato uniforme:
-
-```json
-{
-  "timestamp": "2026-10-23T02:35:08.2228529",
-  "status": 404,
-  "error": "Not Found",
-  "message": "Empleado no encontrado con id: 99999999",
-  "path": "/api/admin/empleados/99999999"
-}
-```
-
-### 18. Rol y duplicados → 400
-
-#### 18.1 Rol CLIENTE → 400
-
-**Request**: `POST http://localhost:8080/api/admin/empleados` con
-`Authorization: Bearer <TOKEN>` y body:
-
-```json
-{
-  "nombre": "Otro",
-  "apellido": "Empleado",
-  "dni": "11111111A",
-  "email": "otro.cliente@test.com",
-  "telefono": "600000000",
-  "direccion": "Calle Otra 1",
-  "rol": "CLIENTE"
-}
-```
-
-**Response** — `400 Bad Request` con
-`"message": "El empleado solo puede tener los roles ADMIN o TRABAJADOR"`.
-
-```json
-{
-  "timestamp": "2026-10-23T02:36:46.657206",
+  "timestamp": "2026-11-05T12:00:00",
   "status": 400,
   "error": "Bad Request",
-  "message": "El empleado solo puede tener los roles ADMIN o TRABAJADOR",
-  "path": "/api/admin/empleados"
+  "message": "La cantidad debe ser mayor que 0",
+  "path": "/api/solicitudes"
 }
 ```
 
-#### 18.2 DNI duplicado → 400
+- `400`: validación, regla de negocio o JSON ilegible.
+- `401` / `403`: los emite la cadena de filtros; pueden llegar sin cuerpo.
+- `404`: recurso inexistente.
+- `503`: fallo al consultar Icecat.
 
-**Request**: el mismo `POST`, con el DNI de la prueba 14:
+### Documentación interactiva
 
-```json
-{
-  "nombre": "Otro",
-  "apellido": "Empleado",
-  "dni": "87654321X",
-  "email": "dni.repetido@test.com",
-  "telefono": "600000000",
-  "direccion": "Calle Otra 1",
-  "rol": "TRABAJADOR"
-}
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
+- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
+
+El esquema `bearerAuth` está declarado en `OpenApiConfig` y se aplica globalmente. Para probar rutas protegidas:
+
+1. Ejecuta `POST /api/auth/login`.
+2. Copia el campo `token`.
+3. Pulsa **Authorize** y pega el token.
+4. Ejecuta el endpoint.
+
+Los endpoints públicos también muestran el candado porque el requisito de seguridad es global en la definición OpenAPI; el acceso real lo decide `SecurityConfig`.
+
+---
+
+## 📐 Diagramas
+
+### Persistencia
+
+- **MySQL**: entidades JPA y migraciones Flyway. Es la fuente de verdad del inventario, precios, pedidos y solicitudes.
+- **MongoDB**: colección `productos` con `ProductoDocumento`; contiene descripciones, galería, especificaciones y reseñas embebidas.
+- El puente entre ambas bases es el **EAN**: `producto_inventario.ean` ↔ `productos.ean`.
+- No hay transacción distribuida entre MySQL y MongoDB: cada operación se resuelve en su base y el catálogo combina ambas lecturas.
+
+### Diagrama de Clases UML
+
+Incluye las entidades JPA y los documentos MongoDB principales. Las relaciones discontinuas representan vínculos lógicos por identificador, no claves foráneas.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Persona {
+        +Long id
+        +String nombre
+        +String apellido
+        +String dni
+        +String email
+        +String telefono
+        +String direccion
+        +Boolean activo
+    }
+
+    class Usuario {
+        +Long id
+        +String username
+        +String password
+        +RolUsuario rol
+        +LocalDateTime fechaCreacion
+        +Boolean activo
+        +Integer tokenVersion
+    }
+
+    class Cliente {
+        +Long id
+        +Boolean activo
+    }
+
+    class Empleado {
+        +Long id
+        +RolUsuario rol
+        +Boolean activo
+    }
+
+    class Categoria {
+        +Long id
+        +String nombre
+        +String descripcion
+        +Boolean activo
+    }
+
+    class Proveedor {
+        +Long id
+        +String nombreEmpresa
+        +String cif
+        +String contacto
+        +String telefono
+        +String email
+        +String direccion
+        +Boolean activo
+    }
+
+    class ProductoInventario {
+        +Long id
+        +String ean
+        +String nombreCorto
+        +Integer stockActual
+        +Integer stockMinimo
+        +BigDecimal precioCompra
+        +BigDecimal precioVenta
+        +String marca
+        +Boolean activo
+    }
+
+    class Pedido {
+        +Long id
+        +LocalDateTime fechaPedido
+        +EstadoPedido estado
+        +BigDecimal total
+        +Boolean activo
+    }
+
+    class PedidoDetalle {
+        +Long id
+        +Integer cantidad
+        +BigDecimal precioUnitario
+        +BigDecimal subtotal
+        +Boolean activo
+    }
+
+    class SolicitudReposicion {
+        +Long id
+        +LocalDateTime fechaSolicitud
+        +Integer cantidad
+        +EstadoSolicitud estado
+        +Boolean activo
+    }
+
+    class ProductoDocumento {
+        +String id
+        +String ean
+        +String titulo
+        +String nombreCorto
+        +String marca
+        +String categoria
+        +String descripcionCorta
+        +String descripcionLarga
+        +Boolean activo
+        +LocalDateTime fechaSincronizacion
+    }
+
+    class Imagen {
+        +String urlAlta
+        +String urlMedia
+        +boolean esPrincipal
+    }
+
+    class EspecificacionGrupo {
+        +String grupo
+    }
+
+    class EspecificacionItem {
+        +String nombre
+        +String valor
+    }
+
+    class Comentario {
+        +String id
+        +Long clienteId
+        +String nombreCliente
+        +String texto
+        +Integer valoracion
+        +LocalDateTime fechaCreacion
+        +String respuestaOficial
+        +String nombreRespondedor
+        +String usernameRespondedor
+        +LocalDateTime fechaRespuesta
+        +Boolean activo
+    }
+
+    class RolUsuario {
+        <<enumeration>>
+        ADMIN
+        TRABAJADOR
+        CLIENTE
+    }
+
+    class EstadoPedido {
+        <<enumeration>>
+        PENDIENTE
+        PROCESANDO
+        ENVIADO
+        ENTREGADO
+    }
+
+    class EstadoSolicitud {
+        <<enumeration>>
+        PENDIENTE
+        RECIBIDO
+    }
+
+    Persona "1" -- "1" Usuario : tiene
+    Persona "1" -- "0..1" Cliente : es
+    Persona "1" -- "0..1" Empleado : es
+    Cliente "1" -- "0..*" Pedido : realiza
+    Pedido "1" -- "1..*" PedidoDetalle : contiene
+    PedidoDetalle "0..*" -- "1" ProductoInventario : referencia
+    Categoria "1" -- "0..*" ProductoInventario : clasifica
+    Proveedor "1" -- "0..*" ProductoInventario : suministra
+    ProductoInventario "1" -- "0..*" SolicitudReposicion : origina
+    Proveedor "1" -- "0..*" SolicitudReposicion : atiende
+    Empleado "1" -- "0..*" SolicitudReposicion : gestiona
+    ProductoDocumento "1" -- "1" ProductoInventario : EAN lógico
+    ProductoDocumento *-- "0..*" Imagen : contiene
+    ProductoDocumento *-- "0..*" EspecificacionGrupo : agrupa
+    EspecificacionGrupo *-- "1..*" EspecificacionItem : incluye
+    ProductoDocumento *-- "0..*" Comentario : embebe
+    Comentario ..> Cliente : clienteId lógico
+
+    note for ProductoDocumento "Documento MongoDB"
+    note for Comentario "Documento embebido en ProductoDocumento"
 ```
 
-**Response** — `400 Bad Request` con
-`"message": "Ya existe una persona registrada con el DNI indicado"`.
+### Diagrama Entidad-Relación (ER)
 
-```json
-{
-  "timestamp": "2026-10-23T02:37:53.348603",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Ya existe una persona registrada con el DNI indicado",
-  "path": "/api/admin/empleados"
-}
+Refleja las tablas de MySQL y sus claves. MongoDB no forma parte de este modelo relacional; `productos` se enlaza lógicamente por `ean`.
+
+```mermaid
+erDiagram
+    persona {
+        bigint id PK
+        varchar nombre
+        varchar apellido
+        varchar dni UK
+        varchar email UK
+        varchar telefono
+        varchar direccion
+        bit activo
+    }
+
+    usuario {
+        bigint id PK
+        varchar username UK
+        varchar password
+        varchar rol
+        bigint persona_id FK
+        datetime fecha_creacion
+        bit activo
+        int token_version
+    }
+
+    cliente {
+        bigint id PK
+        bigint persona_id FK
+        bit activo
+    }
+
+    empleado {
+        bigint id PK
+        bigint persona_id FK
+        varchar rol
+        bit activo
+    }
+
+    categoria {
+        bigint id PK
+        varchar nombre UK
+        varchar descripcion
+        bit activo
+    }
+
+    proveedor {
+        bigint id PK
+        varchar nombre_empresa
+        varchar cif UK
+        varchar contacto
+        varchar telefono
+        varchar email
+        varchar direccion
+        bit activo
+    }
+
+    producto_inventario {
+        bigint id PK
+        varchar ean UK
+        varchar nombre_corto
+        int stock_actual
+        int stock_minimo
+        decimal precio_compra
+        decimal precio_venta
+        varchar marca
+        bigint categoria_id FK
+        bigint proveedor_id FK
+        bit activo
+    }
+
+    pedido {
+        bigint id PK
+        datetime fecha_pedido
+        varchar estado
+        decimal total
+        bigint cliente_id FK
+        bit activo
+    }
+
+    pedido_detalle {
+        bigint id PK
+        bigint pedido_id FK
+        bigint producto_id FK
+        int cantidad
+        decimal precio_unitario
+        decimal subtotal
+        bit activo
+    }
+
+    solicitud_reposicion {
+        bigint id PK
+        datetime fecha_solicitud
+        int cantidad
+        varchar estado
+        bigint producto_id FK
+        bigint proveedor_id FK
+        bigint empleado_id FK
+        bit activo
+    }
+
+    persona ||--|| usuario : tiene
+    persona ||--o| cliente : es
+    persona ||--o| empleado : es
+    categoria ||--o{ producto_inventario : clasifica
+    proveedor ||--o{ producto_inventario : suministra
+    cliente ||--o{ pedido : realiza
+    pedido ||--|{ pedido_detalle : contiene
+    producto_inventario ||--o{ pedido_detalle : aparece
+    producto_inventario ||--o{ solicitud_reposicion : repone
+    proveedor ||--o{ solicitud_reposicion : atiende
+    empleado ||--o{ solicitud_reposicion : gestiona
 ```
 
-#### 18.3 Email duplicado → 400
+`usuario.persona_id`, `cliente.persona_id` y `empleado.persona_id` son únicos: cada persona tiene como máximo una cuenta, un perfil de cliente y una ficha de empleado. `proveedor.cif` se añade en la migración V2 como columna nullable y única.
 
-**Request**: el mismo `POST`, con el email de la prueba 14:
+### Diagrama de Arquitectura
 
-```json
-{
-  "nombre": "Otro",
-  "apellido": "Empleado",
-  "dni": "22222222B",
-  "email": "pablo.sanz@technovald.test",
-  "telefono": "600000000",
-  "direccion": "Calle Otra 1",
-  "rol": "TRABAJADOR"
-}
+Flujo de una petición autenticada y dependencias entre capas. Swagger y los clientes HTTP comparten el mismo punto de entrada.
+
+```mermaid
+flowchart LR
+    subgraph CLIENTE["Cliente de la API"]
+        SW["Swagger UI / OpenAPI"]
+        HTTP["Cliente HTTP"]
+    end
+
+    subgraph API["API REST — Spring Boot"]
+        SEC["SecurityConfig\nJwtAuthenticationFilter"]
+        CTRL["Controllers"]
+        MAP["Mappers / DTOs"]
+        SERV["Services"]
+        JPA["Repositorios JPA"]
+        MONGO["Repositorios MongoDB"]
+        ICE["IcecatClient"]
+        MAIL["EmailService"]
+    end
+
+    subgraph DATOS["Persistencia"]
+        MYSQL[("MySQL 8")]
+        MONGO_DB[("MongoDB\nproductos")]
+        FLY["Flyway"]
+    end
+
+    EXT_ICE["Icecat API"]
+    EXT_MAIL["Gmail SMTP"]
+
+    SW --> SEC
+    HTTP --> SEC
+    SEC --> CTRL
+    CTRL --> SERV
+    SERV --> MAP
+    SERV --> JPA
+    SERV --> MONGO
+    JPA --> MYSQL
+    MONGO --> MONGO_DB
+    FLY --> MYSQL
+    SERV --> ICE
+    ICE --> EXT_ICE
+    SERV --> MAIL
+    MAIL --> EXT_MAIL
 ```
 
-**Response** — `400 Bad Request` con
-`"message": "Ya existe una persona registrada con el email indicado"`.
+---
 
-```json
-{
-  "timestamp": "2026-10-23T02:38:19.2714048",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Ya existe una persona registrada con el email indicado",
-  "path": "/api/admin/empleados"
-}
-```
+## 📚 Documentación
 
-### 19. Sin token y con token sin rol ADMIN
+| Recurso | Contenido |
+|---|---|
+| [Swagger UI](http://localhost:8080/swagger-ui.html) | Documentación interactiva de todos los endpoints y esquema Bearer. |
+| [OpenAPI JSON](http://localhost:8080/v3/api-docs) | Especificación OpenAPI generada por springdoc. |
+| `README.md` | Arquitectura, configuración, endpoints e inventario de funcionalidades. |
+| [Diagramas](#-diagramas) | UML, Entidad-Relación y flujo de arquitectura. |
 
-#### 19.1 Sin token → 401
+---
 
-**Request**: `GET http://localhost:8080/api/admin/empleados` con la pestaña
-`Authorization` en `No Auth`.
+## 📋 Inventario de Funcionalidades (Para uso interno)
 
-**Response** — `401 Unauthorized` con el body **completamente vacío**.
+### ✅ Implementado
 
-#### 19.2 Token de CLIENTE → 403
+- ✅ Autenticación JWT y autorización por roles `ADMIN`, `TRABAJADOR` y `CLIENTE`.
+- ✅ Login, recuperación de contraseña y cambio de contraseña con invalidación de tokens (`tokenVersion`).
+- ✅ Correo de recuperación: simulado en `dev` y Gmail SMTP en `prod`.
+- ✅ Administrador inicial desde `.env`, con ficha de empleado asociada.
+- ✅ Clientes: alta pública, perfil propio, listado paginado, detalle, edición, baja y reactivación.
+- ✅ Empleados: alta con credenciales, directorio, detalle, edición, baja, reactivación y reseteo de contraseña.
+- ✅ Categorías: listado, alta, edición, baja y reactivación.
+- ✅ Proveedores: listado, activos, alta, edición, baja y reactivación.
+- ✅ Inventario: listado, stock bajo, alta, edición, ajuste de stock, baja y reactivación.
+- ✅ Catálogo en MongoDB: documento rico, listado y detalle públicos, alta manual y sincronización individual/masiva con Icecat.
+- ✅ Pedidos: creación, mis pedidos, listado de staff, cambio de estado con transiciones lineales, total y descuento atómico de stock.
+- ✅ Reseñas: creación, listado público por producto, bandeja de pendientes, respuesta oficial e integración en el detalle del catálogo.
+- ✅ Solicitudes de reposición: creación, recepción atómica con incremento de stock y listado por estado.
+- ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
+- ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
+- ✅ Prueba de contexto de Spring Boot.
 
-**Request**: el mismo `GET`, con `Authorization: Bearer <TOKEN_CLIENTE>`.
+### ❌ Pendiente
 
-**Response** — `403 Forbidden` con el body **completamente vacío**.
+- ❌ Estadísticas: top 5 de productos más vendidos (consulta agregada, endpoint `/api/stats/productos-mas-vendidos` y DTO de respuesta).
+- ❌ Datos de demostración: seeder de usuarios, categorías, proveedores, productos, pedidos y reseñas.
+- ❌ Suite de pruebas: unitarias y de integración de auth, stock atómico, pedidos, reseñas y solicitudes.
+- ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
+- ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
+- ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
+- ❌ Informes y exportación de datos.
+- ❌ Auditoría de cambios y notificaciones automáticas.
+- ❌ Pasarela de pago y seguimiento de envíos.
 
-#### 19.3 POST con token de CLIENTE → 403
+---
 
-**Request**: `POST http://localhost:8080/api/admin/empleados` con
-`Authorization: Bearer <TOKEN_CLIENTE>` y cualquier body válido.
-
-**Response** — `403 Forbidden` con el body **completamente vacío**: la regla de
-rol se comprueba antes de leer el cuerpo de la petición.
-
-### Resumen de resultados
-
-| # | Petición | Resultado | Formato uniforme |
-| --- | --- | --- | --- |
-| 1 | Login correcto | **200** + token | — |
-| 2 | Sin token | **401** | ❌ (viene de los filtros) |
-| 3 | Con token válido | **404** | ✅ |
-| 4 | Registro correcto | **201** + credenciales | — |
-| 5 | DNI repetido | **400** | ✅ |
-| 6 | Email repetido | **400** | ✅ |
-| 7 | Username con sufijo | **201** | — |
-| 8 | Login con las credenciales generadas | **200** + token | — |
-| 9 | Datos inválidos | **400** | ✅ |
-| 10 | Mi perfil con token de cliente | **200** | — |
-| 11 | Actualizar mis datos | **200** | — |
-| 12 | Email de otra persona | **400** | ✅ |
-| 13 | Sin token / con token de admin | **401** / **404** | ❌ (el 401 viene de los filtros) / ✅ |
-| 14 | Alta de empleado | **201** + credenciales | — |
-| 15 | Login del empleado | **200** + token | — |
-| 16 | Directorio de empleados | **200** | — |
-| 17 | Empleado por id / id inexistente | **200** / **404** | ✅ (el 404) |
-| 18 | Rol CLIENTE y duplicados | **400** | ✅ |
-| 19 | Sin token / token de CLIENTE | **401** / **403** | ❌ (vienen de los filtros) |
-
-## 📊 Estado del proyecto
-
-| | |
-| --- | --- |
-| Compilación, pruebas y empaquetado | ✅ `.\mvnw.cmd clean package` |
-| Arranque | ✅ arranca y conecta a MySQL |
-| Esquema | ✅ 10 tablas versionadas por Flyway (1 migración) |
-| Modelo JPA | ✅ 10 entidades y 3 enums, validados contra el esquema al arrancar |
-| Autenticación | ✅ login con JWT; el resto de rutas exige `Authorization: Bearer`, y la gestión de empleados exige además rol `ADMIN` |
-| Manejo de errores | ✅ formato uniforme en todos los errores que pasan por el dispatcher |
-| Registro de clientes | ✅ alta pública transaccional con credenciales generadas y token |
-| Perfil de cliente | ✅ el cliente consulta y actualiza sus datos con su token; el resto de usuarios recibe 404 |
-| Gestión de empleados | ✅ el `ADMIN` da de alta cuentas `ADMIN`/`TRABAJADOR` y consulta el directorio; el resto de roles recibe 403 |
-| Endpoints accesibles | `POST /api/auth/login` y `POST /api/clientes/register` (públicos); `GET` y `PUT /api/clientes/me` (exigen token); `POST /api/admin/empleados` y `GET /api/admin/empleados[/{id}]` (exigen token de `ADMIN`) |
-
-## ⚠️ Deudas conocidas
-
-- **Dos altas simultáneas con el mismo DNI o email** (de cliente o de empleado,
-  o dos actualizaciones de perfil simultáneas con el mismo email) pueden pasar
-  las dos la comprobación previa y dejar que sea MySQL quien rechace el segundo
-  `INSERT` por la restricción `UNIQUE`: esa petición recibe un `500` en lugar
-  del `400` de negocio. La ventana es mínima y el dato **nunca** queda
-  duplicado, porque la garantía real es la restricción de la base de datos.
-- **El orden de los errores por campo no está garantizado**: el
-  `GlobalExceptionHandler` une los mensajes según el orden en que se los dé
-  Hibernate Validator, que puede variar entre dos peticiones idénticas. Los
-  mensajes son siempre los mismos; solo cambia el orden en que aparecen.
-- **La contraseña inicial viaja en claro** en la respuesta del alta, tanto en el
-  registro de clientes como en el alta de empleados: es la única forma de que el
-  cliente o el administrador la conozcan. En la base de datos solo queda su hash
-  BCrypt. En el caso del empleado, el administrador tiene que entregársela en
-  persona: no hay envío automático por email.
-- **La política de credenciales es fija** (longitud 16, 1000 intentos de
-  username) en las constantes de `CredentialGenerator`. Cuando existan perfiles
-  `dev`/`prod`, se externalizará a `application.properties`.
-- **La validación del DNI solo comprueba el formato** (8 dígitos + letra
-  mayúscula), no que la letra corresponda con los dígitos según el algoritmo
-  oficial.
-- **Añadir un carácter Base64 válido al final de un token no invalida la
-  firma** (los bits de padding del Base64 se ignoran). No es explotable: el
-  token sigue siendo del mismo usuario, con la misma caducidad y la misma
-  versión de credenciales. Se documenta como comportamiento conocido de JJWT.
-- **El directorio de empleados no está paginado**: `GET /api/admin/empleados`
-  devuelve todas las fichas en una sola respuesta. Con una plantilla de decenas
-  de personas es suficiente; si crece, habrá que paginarlo.
-- **Los 401 y 403 de la cadena de filtros no llevan cuerpo** (ni formato
-  uniforme): Spring Security resuelve la petición antes del dispatcher, así que
-  el `GlobalExceptionHandler` no puede darles cuerpo. El 403 solo lo emite la
-  autorización por rol.
+<p align="center">
+  <strong>TechNovaLD</strong> — API REST de gestión de e-commerce.
+</p>
