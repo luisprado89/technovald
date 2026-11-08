@@ -204,6 +204,8 @@ TechNovaLD/
 │           │   └── EstadisticaControllerTest.java
 │           ├── exception/
 │           │   └── GlobalExceptionHandlerTest.java
+│           ├── integration/
+│           │   └── TechNovaLdIntegrationTest.java
 │           ├── security/
 │           │   ├── JwtAuthenticationFilterTest.java
 │           │   ├── JwtServiceTest.java
@@ -1045,13 +1047,12 @@ flowchart LR
 - ✅ Estadísticas: Top 5 de productos más vendidos, con consulta agregada y endpoint `GET /api/stats/productos-mas-vendidos` (solo ADMIN).
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
-- ✅ 107 pruebas automatizadas: 92 unitarias, 14 de seguridad con MockMvc y 1 de contexto.
+- ✅ 114 pruebas automatizadas: 92 unitarias, 14 de seguridad, 7 de integración con Testcontainers y 1 de contexto.
 
 ### ❌ Pendiente
 
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
 - ❌ Datos de demostración: seeder de usuarios, categorías, proveedores, productos, pedidos y reseñas.
-- ❌ Pruebas de integración con Testcontainers: auth, stock concurrente, pedidos, reseñas y solicitudes.
 - ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
 - ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
