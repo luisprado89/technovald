@@ -210,8 +210,11 @@ TechNovaLD/
 │           │   └── SecurityRoutesTest.java
 │           ├── service/impl/
 │           │   ├── AuthServiceImplTest.java
+│           │   ├── CategoriaServiceImplTest.java
 │           │   ├── EstadisticaServiceImplTest.java
+│           │   ├── InventarioServiceImplTest.java
 │           │   ├── PedidoServiceImplTest.java
+│           │   ├── ProveedorServiceImplTest.java
 │           │   └── SolicitudReposicionServiceImplTest.java
 │           └── TechNovaLdApplicationTests.java # Test de carga de contexto
 ├── .env.example
@@ -1038,8 +1041,7 @@ flowchart LR
 - ✅ Estadísticas: Top 5 de productos más vendidos, con consulta agregada y endpoint `GET /api/stats/productos-mas-vendidos` (solo ADMIN).
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
-- ✅ 49 pruebas automatizadas: 45 unitarias, 3 de seguridad con MockMvc y 1 de contexto.
-- ✅ Prueba de contexto de Spring Boot.
+- ✅ 79 pruebas automatizadas: 69 unitarias, 9 de seguridad con MockMvc y 1 de contexto.
 
 ### ❌ Pendiente
 
