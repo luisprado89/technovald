@@ -109,13 +109,13 @@ graph TD
     end
 
     subgraph Web["Capa de presentación"]
-        Controllers["Controllers (12)<br/>@RestController"]
+        Controllers["Controllers (13)<br/>@RestController"]
         Advice["GlobalExceptionHandler<br/>ErrorResponse uniforme"]
     end
 
     subgraph App["Capa de aplicación"]
-        Services["Services (12 interfaces)"]
-        Impls["ServiceImpl (13)<br/>reglas de negocio"]
+        Services["Services (13 interfaces)"]
+        Impls["ServiceImpl (14)<br/>reglas de negocio"]
     end
 
     subgraph Mapping["Capa de mapeo"]
@@ -171,11 +171,11 @@ TechNovaLD/
 │   │   │   │                                   #  @EnableAsync)
 │   │   │   ├── client/                         # IcecatClient: cliente HTTP del servicio externo
 │   │   │   ├── config/                         # SecurityConfig, OpenApiConfig, RestTemplateConfig
-│   │   │   ├── controller/                     # 12 controladores REST
+│   │   │   ├── controller/                     # 13 controladores REST
 │   │   │   ├── document/                       # 5 documentos MongoDB (catálogo)
 │   │   │   ├── dto/
 │   │   │   │   ├── request/                    # 17 DTOs de entrada
-│   │   │   │   ├── response/                   # 19 DTOs de salida
+│   │   │   │   ├── response/                   # 20 DTOs de salida
 │   │   │   │   └── icecat/                     # 11 DTOs que reflejan la respuesta de Icecat
 │   │   │   ├── entity/                         # 10 entidades JPA (MySQL)
 │   │   │   ├── enums/                          # RolUsuario, EstadoPedido, EstadoSolicitud
@@ -183,13 +183,13 @@ TechNovaLD/
 │   │   │   │                                   #  GlobalExceptionHandler
 │   │   │   ├── mapper/                         # 12 mappers Entity ↔ DTO
 │   │   │   ├── repository/
-│   │   │   │   ├── mysql/                      # 10 repositorios JPA
+│   │   │   │   ├── mysql/                      # 10 repositorios JPA + ProductoMasVendidoProjection
 │   │   │   │   └── mongo/                      # 1 repositorio MongoDB
 │   │   │   ├── security/                       # JwtService, JwtAuthenticationFilter,
 │   │   │   │                                   #  CustomUserDetailsService, CredentialGenerator
 │   │   │   ├── seeder/                         # AdminBootstrapInitializer
-│   │   │   └── service/
-│   │   │       └── impl/                       # 13 implementaciones
+│   │   │   └── service/                       # 13 interfaces (incluye EstadisticaService)
+│   │   │       └── impl/                       # 14 implementaciones
 │   │   └── resources/
 │   │       ├── application.properties          # Configuración común
 │   │       ├── application-dev.properties      # Perfil dev (local / IDE)
@@ -211,7 +211,7 @@ TechNovaLD/
 
 El árbol muestra solo el backend y sus recursos de configuración; el fichero `.env` no se versiona.
 
-**Cómputo de ficheros:** 12 controladores + 12 interfaces de servicio + 13 implementaciones + 12 mappers + 10 entidades + 5 documentos + 3 enums + 47 DTOs + 11 repositorios + 4 excepciones + 4 clases de seguridad + 1 seeder + 3 clases de configuración + 1 cliente + 1 entrada = **139 ficheros Java**.
+**Cómputo de ficheros:** 13 controladores + 13 interfaces de servicio + 14 implementaciones + 12 mappers + 10 entidades + 5 documentos + 3 enums + 48 DTOs + 11 repositorios + 1 proyección + 4 excepciones + 4 clases de seguridad + 1 seeder + 3 clases de configuración + 1 cliente + 1 entrada = **144 ficheros Java**.
 
 ---
 
@@ -545,6 +545,14 @@ Base: `/api/solicitudes`
 
 El usuario autenticado debe tener ficha de empleado; el administrador inicial la tiene. La recepción es atómica: si el stock no se actualiza, la transacción revierte el estado.
 
+### EstadisticaController
+
+Base: `/api/stats`
+
+| Método | Ruta | Roles | Entrada | Salida | Descripción |
+|---|---|---|---|---|---|
+| `GET` | `/api/stats/productos-mas-vendidos` | ADMIN | - | `List<ProductoMasVendidoResponse>` | Top 5 de productos por unidades vendidas; orden descendente. |
+
 ### DTOs de entrada y salida
 
 **DTOs de entrada**
@@ -582,6 +590,7 @@ El usuario autenticado debe tener ficha de empleado; el administrador inicial la
 | `CategoriaResponse` | `id`, `nombre`, `descripcion`, `activo` |
 | `ProveedorResponse` | `id`, `nombreEmpresa`, `cif`, `contacto`, `telefono`, `email`, `direccion`, `activo` |
 | `ProductoInventarioResponse` | `id`, `ean`, `nombreCorto`, `stockActual`, `stockMinimo`, `precioCompra`, `precioVenta`, `marca`, `categoriaId`, `categoriaNombre`, `proveedorId`, `proveedorNombre`, `activo` |
+| `ProductoMasVendidoResponse` | `nombreProducto`, `marca`, `cantidadTotalVendida` |
 | `ProductoCatalogoResumenResponse` | `id`, `ean`, `nombreCorto`, `marca`, `categoria`, `precioVenta`, `stockActual`, `disponible`, `imagenPrincipalUrl` |
 | `ProductoCatalogoDetalleResponse` | `id`, `ean`, `titulo`, `nombreCorto`, `marca`, `categoria`, `descripcionCorta`, `descripcionLarga`, `imagenes`, `especificaciones`, `comentarios`, `precioVenta`, `stockActual`, `disponible`, `fechaSincronizacion`, `activo` |
 | `ImagenResponse` | `urlAlta`, `urlMedia`, `esPrincipal` |
@@ -1012,13 +1021,14 @@ flowchart LR
 - ✅ Pedidos: creación, mis pedidos, listado de staff, cambio de estado con transiciones lineales, total y descuento atómico de stock.
 - ✅ Reseñas: creación, listado público por producto, bandeja de pendientes, respuesta oficial e integración en el detalle del catálogo.
 - ✅ Solicitudes de reposición: creación, recepción atómica con incremento de stock y listado por estado.
+- ✅ Estadísticas: Top 5 de productos más vendidos, con consulta agregada y endpoint `GET /api/stats/productos-mas-vendidos` (solo ADMIN).
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
 - ✅ Prueba de contexto de Spring Boot.
 
 ### ❌ Pendiente
 
-- ❌ Estadísticas: top 5 de productos más vendidos (consulta agregada, endpoint `/api/stats/productos-mas-vendidos` y DTO de respuesta).
+- ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
 - ❌ Datos de demostración: seeder de usuarios, categorías, proveedores, productos, pedidos y reseñas.
 - ❌ Suite de pruebas: unitarias y de integración de auth, stock atómico, pedidos, reseñas y solicitudes.
 - ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
