@@ -199,6 +199,20 @@ TechNovaLD/
 │   │           └── V2__add_proveedor_cif.sql   # CIF único y nullable en proveedor
 │   └── test/
 │       └── java/com/technovald/
+│           ├── controller/
+│           │   ├── AuthControllerTest.java
+│           │   └── EstadisticaControllerTest.java
+│           ├── exception/
+│           │   └── GlobalExceptionHandlerTest.java
+│           ├── security/
+│           │   ├── JwtAuthenticationFilterTest.java
+│           │   ├── JwtServiceTest.java
+│           │   └── SecurityRoutesTest.java
+│           ├── service/impl/
+│           │   ├── AuthServiceImplTest.java
+│           │   ├── EstadisticaServiceImplTest.java
+│           │   ├── PedidoServiceImplTest.java
+│           │   └── SolicitudReposicionServiceImplTest.java
 │           └── TechNovaLdApplicationTests.java # Test de carga de contexto
 ├── .env.example
 ├── .gitattributes
@@ -1024,13 +1038,14 @@ flowchart LR
 - ✅ Estadísticas: Top 5 de productos más vendidos, con consulta agregada y endpoint `GET /api/stats/productos-mas-vendidos` (solo ADMIN).
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
+- ✅ 49 pruebas automatizadas: 45 unitarias, 3 de seguridad con MockMvc y 1 de contexto.
 - ✅ Prueba de contexto de Spring Boot.
 
 ### ❌ Pendiente
 
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
 - ❌ Datos de demostración: seeder de usuarios, categorías, proveedores, productos, pedidos y reseñas.
-- ❌ Suite de pruebas: unitarias y de integración de auth, stock atómico, pedidos, reseñas y solicitudes.
+- ❌ Pruebas de integración con Testcontainers: auth, stock concurrente, pedidos, reseñas y solicitudes.
 - ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
 - ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
