@@ -161,6 +161,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Slice web de Spring Boot 4: @AutoConfigureMockMvc y @WebMvcTest -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
