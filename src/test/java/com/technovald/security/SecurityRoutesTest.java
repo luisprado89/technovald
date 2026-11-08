@@ -82,4 +82,38 @@ class SecurityRoutesTest {
                         .with(user("trabajador").roles("TRABAJADOR")))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void adminPuedeListarClientes() throws Exception {
+        mockMvc.perform(get("/api/admin/clientes")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void trabajadorPuedeListarClientes() throws Exception {
+        mockMvc.perform(get("/api/admin/clientes")
+                        .with(user("trabajador").roles("TRABAJADOR")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void clienteNoPuedeListarEmpleados() throws Exception {
+        mockMvc.perform(get("/api/admin/empleados")
+                        .with(user("cliente").roles("CLIENTE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminPuedeListarEmpleados() throws Exception {
+        mockMvc.perform(get("/api/admin/empleados")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void elCatalogoPublicoNoRequiereToken() throws Exception {
+        mockMvc.perform(get("/api/catalogo"))
+                .andExpect(status().isOk());
+    }
 }
