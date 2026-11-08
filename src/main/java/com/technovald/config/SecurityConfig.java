@@ -163,6 +163,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/solicitudes", "/api/solicitudes/**")
                         .hasAnyRole("ADMIN", "TRABAJADOR")
 
+                        // Estadísticas de ventas: solo ADMIN
+                        .requestMatchers("/api/stats/**").hasRole("ADMIN")
+
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
