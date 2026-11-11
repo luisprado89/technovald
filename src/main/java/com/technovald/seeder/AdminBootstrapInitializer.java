@@ -11,15 +11,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /*
- * NOTA: cuando se añada DataInitializer (fase de seeders) y
- * application-dev.properties (fase de entornos), esta clase tendrá que
- * llevar @Profile("!dev") y comprobar app.seed.enabled, como en el
- * proyecto terminado. Ahora mismo no existe ninguno de los dos, así que
- * se ejecuta siempre que la tabla usuario esté vacía.
+ * El bootstrap del administrador se ejecuta antes que DataInitializer
+ * (@Order(1)). Los datos de demostración son independientes: solo se cargan
+ * en el perfil dev y con app.seed.enabled=true.
  */
 
 /**
@@ -37,6 +36,7 @@ import org.springframework.stereotype.Component;
  * credenciales conocidas. La contraseña nunca se escribe en el log.</p>
  */
 @Component
+@Order(1)
 @RequiredArgsConstructor
 @Slf4j
 public class AdminBootstrapInitializer implements CommandLineRunner {
@@ -101,7 +101,7 @@ public class AdminBootstrapInitializer implements CommandLineRunner {
         usuarioRepository.save(usuarioAdmin);
 
         /*
-         * Ajuste respecto al plan inicial de la fase: se enlaza la persona con
+         * Ajuste respecto al plan inicial: se enlaza la persona con
          * su usuario recién creado y se guarda otra vez. Es lo que hace el
          * proyecto terminado y mantiene la relación bidireccional coherente.
          */

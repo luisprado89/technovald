@@ -350,6 +350,29 @@ En el arranque verás, en este orden:
 2. El administrador inicial, si la tabla `usuario` está vacía.
 3. El mensaje `Started TechNovaLdApplication`.
 
+### 4.1. Cargar datos de demostración
+
+El seed de demo es independiente del administrador inicial y **solo se ejecuta en `dev`**. Está desactivado por defecto para que los tests no consulten Icecat ni inserten datos.
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "dev"
+$env:APP_SEED_ENABLED = "true"
+.\mvnw.cmd spring-boot:run
+```
+
+Carga:
+
+- 20 clientes y 5 trabajadores, con correos `@yopmail.com`.
+- Contraseña común: `Demo1234!`.
+- 6 categorías y 10 proveedores.
+- 18 productos validados contra Open Icecat; si un EAN no está disponible, se omite y se registra el motivo.
+- 18 fichas de catálogo en MongoDB.
+- 10 reseñas, 5 pedidos y 3 solicitudes de reposición.
+
+El seeder es idempotente: si ya existen categorías o clientes, no duplica nada. Para desactivarlo, arranca sin `APP_SEED_ENABLED` o con `APP_SEED_ENABLED=false`.
+
+Los productos se validan **antes** de insertarse con `IcecatClient` y usan `IcecatMapper` para crear la ficha MongoDB. No se incluyen marcas que solo están en Full Icecat (Apple, HP, Lenovo, Intel, AMD, Western Digital o Corsair).
+
 ### 5. Comprobar que está viva
 
 | Recurso | URL |
@@ -363,6 +386,69 @@ En el arranque verás, en este orden:
 |---|---|---|---|---|
 | `dev` | Por defecto (`spring.profiles.default=dev`) | `8080` | Se imprime en consola | SQL y `DEBUG` |
 | `prod` | `SPRING_PROFILES_ACTIVE=prod` | `${PORT:8080}` | Gmail SMTP | `INFO` |
+
+#### Cambiar entre `dev` y `prod`
+
+El perfil **no se elige dentro de `application.properties`**: se indica al arrancar. La aplicación es la misma; el perfil activa configuración y beans distintos.
+
+```powershell
+# Desarrollo
+$env:SPRING_PROFILES_ACTIVE = "dev"
+.\mvnw.cmd spring-boot:run
+
+# Producción
+$env:SPRING_PROFILES_ACTIVE = "prod"
+$env:GMAIL_USER = "cuenta@gmail.com"
+$env:GMAIL_APP_PASSWORD = "app-password"
+.\mvnw.cmd spring-boot:run
+```
+
+También se puede pasar como argumento:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=prod"
+```
+
+En el IDE se configura en **Active profiles**; en Docker/despliegue, con la variable `SPRING_PROFILES_ACTIVE`.
+
+#### Dónde se modifica cada cosa
+
+| Qué quieres cambiar | Dónde |
+|---|---|
+| Perfil activo | `SPRING_PROFILES_ACTIVE` o `--spring.profiles.active` |
+| Credenciales y datos de conexión | `.env` o variables de entorno del sistema |
+| Puerto de desarrollo | `application-dev.properties` (`server.port=8080`) |
+| Puerto de producción | Variable `PORT`; por defecto `8080` |
+| Correo en desarrollo | `EmailServiceLogImpl`; no requiere SMTP |
+| Correo en producción | `application-prod.properties` + `GMAIL_USER` y `GMAIL_APP_PASSWORD` |
+| SQL y nivel de logs en desarrollo | `application-dev.properties` |
+| Nivel de logs en producción | `application-prod.properties` |
+| Datos de demostración | `APP_SEED_ENABLED=true` y `DataInitializer` |
+| Administrador inicial | `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD` |
+| MySQL/MongoDB/JWT/Icecat | `application.properties` + valores del `.env` |
+
+#### La base de datos no cambia sola con el perfil
+
+`application.properties` define la conexión con las variables del `.env`:
+
+```properties
+spring.datasource.url=jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE}...
+spring.mongodb.uri=${MONGO_URI}
+```
+
+Por tanto, `dev` y `prod` apuntan a la **misma** base si no cambias esas variables. Para usar bases distintas:
+
+- Ten un `.env` local para desarrollo y variables de entorno de producción en el servidor/Docker.
+- O define URLs específicas en `application-dev.properties` y `application-prod.properties`, usando variables de entorno para las credenciales.
+
+No se deben escribir contraseñas directamente en los `.properties`: van en `.env` o en el gestor de secretos del despliegue.
+
+#### Qué hace cada perfil
+
+- **`dev`**: pensado para trabajar en local. Usa el puerto fijo `8080`, muestra SQL, activa `DEBUG`, imprime los correos en consola y permite cargar datos de demostración con `APP_SEED_ENABLED=true`. El seeder no se ejecuta en los tests porque la propiedad queda en `false` por defecto.
+- **`prod`**: pensado para el servidor. Usa el puerto que indique `PORT`, reduce los logs a `INFO`, activa Gmail SMTP, respeta las cabeceras del proxy y **no** ejecuta el seeder de demostración.
+
+`AdminBootstrapInitializer` no depende del perfil: crea el administrador inicial si la tabla `usuario` está vacía y existen las credenciales en el entorno.
 
 ### Problemas frecuentes
 
@@ -1048,11 +1134,11 @@ flowchart LR
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
 - ✅ 114 pruebas automatizadas: 92 unitarias, 14 de seguridad, 7 de integración con Testcontainers y 1 de contexto.
+- ✅ Datos de demostración: 20 clientes, 5 trabajadores, 6 categorías, 10 proveedores, 18 productos validados con Icecat, 10 reseñas, 5 pedidos y 3 reposiciones; seed `dev` idempotente y opt-in.
 
 ### ❌ Pendiente
 
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
-- ❌ Datos de demostración: seeder de usuarios, categorías, proveedores, productos, pedidos y reseñas.
 - ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
 - ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
