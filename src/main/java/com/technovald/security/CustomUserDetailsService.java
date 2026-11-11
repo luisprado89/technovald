@@ -3,6 +3,7 @@ package com.technovald.security;
 import com.technovald.entity.Usuario;
 import com.technovald.repository.mysql.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -26,7 +27,7 @@ public class CustomUserDetailsService implements UserDetailsService {
      * @throws UsernameNotFoundException si el usuario no existe o está inactivo.
      */
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(@NonNull String username) throws UsernameNotFoundException {
         Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(username)
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "Usuario no encontrado o inactivo: " + username));

@@ -45,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
     private final EmailService emailService;
 
     @Override
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest loginRequest) {
 
         /*
          * Delegar en el AuthenticationManager es lo que hace que la contraseña
@@ -53,7 +53,7 @@ public class AuthServiceImpl implements AuthService {
          * BadCredentialsException y la cadena de seguridad responde 401.
          */
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
+                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
         /*
          * El proveedor de autenticación deja como principal el UserDetails que
@@ -66,9 +66,9 @@ public class AuthServiceImpl implements AuthService {
          * El rol se lee de la entidad, que es la fuente de verdad, para que el
          * valor devuelto coincida con el claim "rol" del token.
          */
-        Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(request.getUsername())
+        Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(loginRequest.getUsername())
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("Usuario no encontrado o inactivo: " + request.getUsername()));
+                        new UsernameNotFoundException("Usuario no encontrado o inactivo: " + loginRequest.getUsername()));
 
         return AuthResponse.builder().token(jwtService.generateToken(userDetails))
                 .username(usuario.getUsername()).rol(usuario.getRol().name())
@@ -81,8 +81,8 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     @Transactional
-    public void forgotPassword(ForgotPasswordRequest request) {
-        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+    public void forgotPassword(ForgotPasswordRequest forgotPasswordRequest) {
+        String email = forgotPasswordRequest.getEmail().trim().toLowerCase(Locale.ROOT);
         Persona persona = personaRepository.findByEmail(email).orElse(null);
         Usuario usuario = persona == null ? null : persona.getUsuario();
 
@@ -106,22 +106,22 @@ public class AuthServiceImpl implements AuthService {
      * Verifica la actual, aplica la nueva e invalida los tokens previos.
      *
      * @param username usuario autenticado extraído del JWT.
-     * @param request  DTO con la contraseña actual y la nueva.
+     * @param changePasswordRequest  DTO con la contraseña actual y la nueva.
      */
     @Override
     @Transactional
-    public void changePassword(String username, ChangePasswordRequest request) {
+    public void changePassword(String username, ChangePasswordRequest changePasswordRequest) {
         Usuario usuario = usuarioRepository.findByUsernameAndActivoTrue(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado o inactivo: " + username));
 
-        if (!passwordEncoder.matches(request.getCurrentPassword(), usuario.getPassword())) {
+        if (!passwordEncoder.matches(changePasswordRequest.getCurrentPassword(), usuario.getPassword())) {
             throw new BusinessRuleException("La contraseña actual no es correcta");
         }
-        if (passwordEncoder.matches(request.getNewPassword(), usuario.getPassword())) {
+        if (passwordEncoder.matches(changePasswordRequest.getNewPassword(), usuario.getPassword())) {
             throw new BusinessRuleException("La nueva contraseña debe ser distinta de la actual");
         }
 
-        usuario.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        usuario.setPassword(passwordEncoder.encode(changePasswordRequest.getNewPassword()));
         // Los tokens emitidos antes dejan de valer: habrá que volver a entrar.
         usuario.invalidateTokens();
         usuarioRepository.save(usuario);
