@@ -230,6 +230,17 @@
                 </configuration>
             </plugin>
 
+            <!-- Los tests no deben consultar Icecat ni sembrar datos. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <APP_SEED_ENABLED>false</APP_SEED_ENABLED>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
 

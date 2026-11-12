@@ -117,6 +117,9 @@ public class SecurityConfig {
                         // Punto de entrada interno de errores de Spring
                         .requestMatchers("/error").permitAll()
 
+                        // Healthcheck de Docker/Compose; no expone detalles sensibles
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+
                         // Gestión de empleados: solo ADMIN
                         .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
 

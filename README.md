@@ -352,12 +352,17 @@ En el arranque verás, en este orden:
 
 ### 4.1. Cargar datos de demostración
 
-El seed de demo es independiente del administrador inicial y **solo se ejecuta en `dev`**. Está desactivado por defecto para que los tests no consulten Icecat ni inserten datos.
+El seed de demo es independiente del administrador inicial y **solo se ejecuta en `dev`**. En desarrollo está **activado por defecto**; los tests lo desactivan desde Surefire para no consultar Icecat.
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = "dev"
-$env:APP_SEED_ENABLED = "true"
 .\mvnw.cmd spring-boot:run
+```
+
+Se puede desactivar con:
+
+```powershell
+$env:APP_SEED_ENABLED = "false"
 ```
 
 Carga:
@@ -369,7 +374,7 @@ Carga:
 - 18 fichas de catálogo en MongoDB.
 - 10 reseñas, 5 pedidos y 3 solicitudes de reposición.
 
-El seeder es idempotente: si ya existen categorías o clientes, no duplica nada. Para desactivarlo, arranca sin `APP_SEED_ENABLED` o con `APP_SEED_ENABLED=false`.
+El seeder es idempotente: si ya existen categorías o clientes, no duplica nada. Para desactivarlo, usa `APP_SEED_ENABLED=false`.
 
 Los productos se validan **antes** de insertarse con `IcecatClient` y usan `IcecatMapper` para crear la ficha MongoDB. No se incluyen marcas que solo están en Full Icecat (Apple, HP, Lenovo, Intel, AMD, Western Digital o Corsair).
 
@@ -423,7 +428,7 @@ En el IDE se configura en **Active profiles**; en Docker/despliegue, con la vari
 | Correo en producción | `application-prod.properties` + `GMAIL_USER` y `GMAIL_APP_PASSWORD` |
 | SQL y nivel de logs en desarrollo | `application-dev.properties` |
 | Nivel de logs en producción | `application-prod.properties` |
-| Datos de demostración | `APP_SEED_ENABLED=true` y `DataInitializer` |
+| Datos de demostración | `DataInitializer`; activo en `dev` por defecto, se desactiva con `APP_SEED_ENABLED=false` |
 | Administrador inicial | `BOOTSTRAP_ADMIN_USERNAME` y `BOOTSTRAP_ADMIN_PASSWORD` |
 | MySQL/MongoDB/JWT/Icecat | `application.properties` + valores del `.env` |
 
@@ -445,7 +450,7 @@ No se deben escribir contraseñas directamente en los `.properties`: van en `.en
 
 #### Qué hace cada perfil
 
-- **`dev`**: pensado para trabajar en local. Usa el puerto fijo `8080`, muestra SQL, activa `DEBUG`, imprime los correos en consola y permite cargar datos de demostración con `APP_SEED_ENABLED=true`. El seeder no se ejecuta en los tests porque la propiedad queda en `false` por defecto.
+- **`dev`**: pensado para trabajar en local. Usa el puerto fijo `8080`, muestra SQL, activa `DEBUG`, imprime los correos en consola y carga los datos de demostración por defecto. Se puede desactivar con `APP_SEED_ENABLED=false`; los tests lo desactivan desde Surefire.
 - **`prod`**: pensado para el servidor. Usa el puerto que indique `PORT`, reduce los logs a `INFO`, activa Gmail SMTP, respeta las cabeceras del proxy y **no** ejecuta el seeder de demostración.
 
 `AdminBootstrapInitializer` no depende del perfil: crea el administrador inicial si la tabla `usuario` está vacía y existen las credenciales en el entorno.
@@ -469,6 +474,225 @@ No se deben escribir contraseñas directamente en los `.properties`: van en `.en
 ./mvnw clean package
 java -jar target/app.jar
 ```
+
+---
+
+## 🐳 Docker y Compose
+
+La imagen se construye en dos etapas (Maven Wrapper + JRE 17) y la app se ejecuta con el perfil `prod`. El IDE y Docker pueden convivir con puertos distintos y datos separados:
+
+| Recurso | IDE local | Docker |
+|---|---|---|
+| API | `8080` | `8081` |
+| MySQL | `3306` | `3307` |
+| MongoDB | `27017` | `27018` |
+| Perfil | `dev` | `prod` |
+| Datos | MySQL/Mongo locales | Volúmenes del compose |
+
+Además, el compose publica MySQL en `3307` y MongoDB en `27018` para poder inspeccionar sus datos sin chocar con los servicios locales del IDE. La app, dentro de la red del compose, sigue usando `mysql:3306` y `mongodb:27017`.
+
+### Los tres escenarios
+
+| Escenario | API | MySQL en el host | MongoDB en el host | Perfil | Para qué sirve |
+|---|---:|---:|---:|---|---|
+| Solo IDE | `8080` | `3306` | `27017` | `dev` | Desarrollo y depuración con las bases locales |
+| IDE + Docker | IDE `8080`, Docker `8081` | IDE `3306`, Docker `3307` | IDE `27017`, Docker `27018` | IDE `dev`, Docker `prod` | Comprobar que ambos entornos conviven con datos separados |
+| Solo Docker | `8080` | `3306` | `27017` | `prod` | Evaluación o despliegue sin depender de las bases locales |
+
+En los tres casos, **dentro del contenedor** la app escucha en `8080` y las bases en `3306`/`27017`. Los puertos del host solo cambian el acceso desde fuera; no se toca `application.properties`.
+
+#### Solo IDE
+
+```powershell
+cd D:\TechNovaLD
+$env:SPRING_PROFILES_ACTIVE = "dev"
+.\mvnw.cmd spring-boot:run
+```
+
+No se levanta Docker. La app usa MySQL local `3306` y MongoDB local `27017`.
+
+#### IDE + Docker
+
+```powershell
+# Terminal 1: IDE en 8080
+$env:SPRING_PROFILES_ACTIVE = "dev"
+.\mvnw.cmd spring-boot:run
+
+# Terminal 2: Docker en 8081
+docker compose up -d
+```
+
+El compose usa `APP_PORT=8081`, `MYSQL_HOST_PORT=3307` y `MONGO_HOST_PORT=27018` por defecto. El IDE y Docker no comparten bases.
+
+#### Solo Docker
+
+```powershell
+cd D:\TechNovaLD
+$env:APP_PORT = "8080"
+$env:MYSQL_HOST_PORT = "3306"
+$env:MONGO_HOST_PORT = "27017"
+docker compose up -d
+```
+
+Este modo requiere que `3306` y `27017` estén libres. Si el MySQL o MongoDB local siguen levantados, usa `3307`/`27018` para las bases del Docker y deja el IDE parado.
+
+Si solo quieres Docker pero no necesitas inspeccionar las bases desde el host, puedes dejar los puertos `3307`/`27018`; la app funciona igual porque usa los nombres internos `mysql` y `mongodb`.
+
+### 1. Construir la imagen
+
+```powershell
+docker compose build
+```
+
+### 2. Levantar las bases de datos
+
+```powershell
+docker compose up -d mysql mongodb
+```
+
+Espera a que ambos servicios estén `healthy`:
+
+```powershell
+docker compose ps
+```
+
+### 3. Cargar los datos de demostración
+
+El servicio `seed` es una ejecución única y opcional con perfil `dev`; usa los mismos volúmenes que la app y termina al acabar. `docker compose up` **no** lo ejecuta: hay que activar explícitamente su perfil.
+
+```powershell
+docker compose --profile seed run --rm seed
+```
+
+Si no ejecutas este paso, la app Docker arranca con la base vacía y **solo crea el administrador**. Los usuarios y productos de demostración no se crean en `prod` por sí solos.
+
+### 4. Levantar la aplicación
+
+```powershell
+docker compose up -d app
+docker compose ps
+```
+
+Comprueba el healthcheck:
+
+```powershell
+curl http://localhost:8081/actuator/health
+```
+
+Debe responder con `{"status":"UP"}`.
+
+### 5. Comprobar la API
+
+```powershell
+curl http://localhost:8081/v3/api-docs
+```
+
+Login de demo:
+
+```text
+Usuario: cliente01
+Contraseña: Demo1234!
+```
+
+### 6. Probar el correo real
+
+La app del compose usa `prod` y Gmail SMTP. Para comprobar el envío:
+
+```powershell
+$body = @{ email = "cliente01@yopmail.com" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8081/api/auth/forgot-password `
+  -ContentType "application/json" -Body $body
+```
+
+Abre `https://yopmail.com/es/?login=cliente01` y revisa el correo.
+
+### 7. Parar el entorno
+
+```powershell
+# Conserva los datos
+docker compose down
+
+# Elimina también los volúmenes (reinicio limpio)
+docker compose down -v
+```
+
+### 8. IDE y Docker a la vez
+
+El caso normal es:
+
+- IDE ejecutándose en `8080`, con MySQL local en `3306` y MongoDB local en `27017`.
+- Docker ejecutándose en `8081`, con MySQL en `3307` y MongoDB en `27018`.
+
+```powershell
+# Terminal 1: IDE en 8080, usando el perfil dev
+$env:SPRING_PROFILES_ACTIVE = "dev"
+.\mvnw.cmd spring-boot:run
+
+# Terminal 2: Docker en 8081
+docker compose up -d
+```
+
+Cada uno tiene sus propios datos:
+
+- El IDE usa las bases locales.
+- Docker usa los volúmenes `mysql_data` y `mongo_data` del compose.
+- No comparten tablas, documentos ni credenciales de negocio.
+
+Si solo quieres Docker y el `8080` está libre:
+
+```powershell
+$env:APP_PORT = "8080"
+docker compose up -d
+```
+
+Si además quieres publicar MySQL y MongoDB en los puertos estándar `3306`/`27017`, deben estar libres (sin MySQL/Mongo locales):
+
+```powershell
+$env:APP_PORT = "8080"
+$env:MYSQL_HOST_PORT = "3306"
+$env:MONGO_HOST_PORT = "27017"
+docker compose up -d
+```
+
+No hace falta modificar `application.properties`: dentro del contenedor la app siempre usa `mysql:3306` y `mongodb:27017`; lo que cambia es el puerto del host. Si el IDE está levantado, usa `8081`/`3307`/`27018` para no chocar.
+
+### 9. Dos instancias de Docker
+
+Si necesitas dos copias de Docker a la vez, cada una debe usar puertos de host distintos y un proyecto de Compose distinto:
+
+```powershell
+$env:APP_PORT = "8080"
+$env:MYSQL_HOST_PORT = "3307"
+$env:MONGO_HOST_PORT = "27018"
+docker compose -p technovald-8080 up -d
+
+$env:APP_PORT = "8081"
+$env:MYSQL_HOST_PORT = "3308"
+$env:MONGO_HOST_PORT = "27019"
+docker compose -p technovald-8081 up -d
+```
+
+Los puertos de bases solo son para inspección desde el host; dentro de cada red el servicio sigue usando `mysql:3306` y `mongodb:27017`. Para un despliegue real, lo habitual es **no publicar** los puertos de MySQL/MongoDB y dejar solo la API detrás de un proxy.
+
+### Variables que debes revisar
+
+Antes de levantar el compose, revisa en `.env`:
+
+| Variable | Uso |
+|---|---|
+| `APP_PORT` | Puerto del host para la API de Docker (`8081` por defecto; `8080` si Docker va solo) |
+| `MYSQL_HOST_PORT` | Puerto del host para MySQL del Docker (`3307` por defecto) |
+| `MONGO_HOST_PORT` | Puerto del host para MongoDB del Docker (`27018` por defecto) |
+| `MYSQL_DATABASE` | Base de datos de la app |
+| `MYSQL_APP_USER` / `MYSQL_APP_PASSWORD` | Usuario no root que usa la app |
+| `MYSQL_ROOT_PASSWORD` | Contraseña root del contenedor MySQL |
+| `MONGO_DATABASE` | Base de datos de MongoDB |
+| `JWT_SECRET`, `JWT_EXPIRATION` | Firma y vida del token |
+| `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` | Administrador inicial |
+| `ICECAT_URL`, `ICECAT_TOKEN` | Catálogo externo |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD` | Correo real en `prod` |
+
+El compose publica MySQL en `3307` y MongoDB en `27018` para poder inspeccionarlos desde el host sin chocar con los servicios locales. La app usa `mysql:3306` y `mongodb:27017` dentro de la red del compose. En producción real, esos puertos de bases deberían quitarse del compose y dejarse solo la API detrás de un proxy.
 
 ---
 
@@ -1135,11 +1359,11 @@ flowchart LR
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
 - ✅ 114 pruebas automatizadas: 92 unitarias, 14 de seguridad, 7 de integración con Testcontainers y 1 de contexto.
 - ✅ Datos de demostración: 20 clientes, 5 trabajadores, 6 categorías, 10 proveedores, 18 productos validados con Icecat, 10 reseñas, 5 pedidos y 3 reposiciones; seed `dev` idempotente y opt-in.
+- ✅ Docker/Compose: `Dockerfile` multi-stage, `.dockerignore`, MySQL 8, MongoDB 7, healthchecks, volúmenes, app en `prod` y seed one-shot en `dev`.
 
 ### ❌ Pendiente
 
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
-- ❌ Empaquetado: `Dockerfile`, `docker-compose.yml`, `.dockerignore` y guía de despliegue.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
 - ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
 - ❌ Informes y exportación de datos.

@@ -1,0 +1,32 @@
+# Artefactos de build
+target/
+*.jar
+*.war
+*.class
+
+# Entorno y secretos: nunca dentro de la imagen
+.env
+.env.*
+!.env.example
+
+# Git y metadatos del IDE
+.git/
+.gitignore
+.idea/
+*.iml
+.vscode/
+
+# Logs y temporales
+*.log
+logs/
+tmp/
+.dsh-*
+
+# Documentación y ficheros que no necesita el runtime
+README.md
+docs/
+*.md
+
+# Sistema
+.DS_Store
+Thumbs.db
