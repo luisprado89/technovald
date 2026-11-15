@@ -1345,7 +1345,7 @@ flowchart LR
 - ✅ Login, recuperación de contraseña y cambio de contraseña con invalidación de tokens (`tokenVersion`).
 - ✅ Correo de recuperación: simulado en `dev` y Gmail SMTP en `prod`.
 - ✅ Administrador inicial desde `.env`, con ficha de empleado asociada.
-- ✅ Clientes: alta pública, perfil propio, listado paginado, detalle, edición, baja y reactivación.
+- ✅ Clientes: alta pública, perfil propio, listado paginado, detalle, edición, baja administrativa y reactivación.
 - ✅ Empleados: alta con credenciales, directorio, detalle, edición, baja, reactivación y reseteo de contraseña.
 - ✅ Categorías: listado, alta, edición, baja y reactivación.
 - ✅ Proveedores: listado, activos, alta, edición, baja y reactivación.
@@ -1361,14 +1361,21 @@ flowchart LR
 - ✅ Datos de demostración: 20 clientes, 5 trabajadores, 6 categorías, 10 proveedores, 18 productos validados con Icecat, 10 reseñas, 5 pedidos y 3 reposiciones; seed `dev` idempotente y opt-in.
 - ✅ Docker/Compose: `Dockerfile` multi-stage, `.dockerignore`, MySQL 8, MongoDB 7, healthchecks, volúmenes, app en `prod` y seed one-shot en `dev`.
 
-### ❌ Pendiente
+### ❌ Pendiente para la entrega final
 
+- ❌ Baja solicitada por el propio cliente, con confirmación de identidad y comunicación conforme al RGPD.
+- ❌ Notificación transaccional de baja por correo, diferenciada del correo de recuperación.
+- ❌ Endurecimiento del servicio de correo: implementaciones separadas para registro y SMTP, plantillas, reintentos y aislamiento de fallos.
+- ❌ Reautenticación, limitación de intentos, rotación de secretos y auditoría de accesos.
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
 - ❌ Búsqueda, filtros y paginación en el catálogo y en los listados de administración.
 - ❌ Informes y exportación de datos.
 - ❌ Auditoría de cambios y notificaciones automáticas.
 - ❌ Pasarela de pago y seguimiento de envíos.
+
+> Estas funcionalidades no forman parte de la versión entregada actualmente;
+> se incorporarán a la entrega final o se pospondrán a versiones posteriores.
 
 ---
 
