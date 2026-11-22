@@ -1,5 +1,6 @@
 package com.technovald.service;
 
+import com.technovald.dto.request.BajaCuentaClienteRequest;
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteAdminResponse;
@@ -80,6 +81,14 @@ public interface ClienteService {
 
     /** Baja lógica: desactiva cliente, persona y usuario. */
     void desactivarCliente(Long id);
+
+    /**
+     * Baja lógica solicitada por el propio cliente autenticado.
+     *
+     * @param username username extraído del JWT.
+     * @param bajaCuentaClienteRequest  motivo indicado por el cliente.
+     */
+    void desactivarCuentaPropiaCliente(String username, BajaCuentaClienteRequest bajaCuentaClienteRequest);
 
     /** Reactiva las tres filas (cliente, persona y usuario). */
     void reactivarCliente(Long id);

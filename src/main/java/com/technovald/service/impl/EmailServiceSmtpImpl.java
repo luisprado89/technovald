@@ -10,6 +10,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 /**
  * Implementación de {@link EmailService} para el perfil de producción ("prod").
@@ -61,6 +62,34 @@ public class EmailServiceSmtpImpl implements EmailService {
             mailSender.send(mensaje);
         } catch (MessagingException ex) {
             throw new RuntimeException("Error al enviar el email de reseteo: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Notifica la baja de la cuenta. Se mantiene síncrono para que el llamador
+     * pueda capturar el fallo sin que la baja ya guardada se revierta.
+     */
+    @Override
+    public void sendBajaCuentaEmail(String email, String nombre, String motivo) {
+        try {
+            MimeMessage mensaje = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mensaje, "utf-8");
+
+            String html = "<h2>Hola " + HtmlUtils.htmlEscape(nombre) + ",</h2>"
+                    + "<p>Tu cuenta en <b>TechNovaLD</b> ha sido dada de baja.</p>"
+                    + "<p><b>Motivo:</b> " + HtmlUtils.htmlEscape(motivo) + "</p>"
+                    + "<p>La cuenta queda desactivada; tus datos no se eliminan.</p>"
+                    + "<p>Si crees que se trata de un error, contacta con soporte.</p>"
+                    + "<br><p>Saludos,<br>Equipo de TechNovaLD</p>";
+
+            helper.setFrom(fromEmail);
+            helper.setTo(email);
+            helper.setSubject("Baja de tu cuenta en TechNovaLD");
+            helper.setText(html, true);
+
+            mailSender.send(mensaje);
+        } catch (MessagingException ex) {
+            throw new RuntimeException("Error al enviar el email de baja: " + ex.getMessage(), ex);
         }
     }
 }

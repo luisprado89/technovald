@@ -27,4 +27,18 @@ public class EmailServiceLogImpl implements EmailService {
                       Por seguridad, te recomendamos cambiarla al iniciar sesión.
                 ============================""", email, nombre, username, nuevaPassword);
     }
+
+    @Override
+    public void sendBajaCuentaEmail(String email, String nombre, String motivo) {
+        log.info("""
+                === EMAIL SIMULADO (DEV) ===
+                To: {}
+                Subject: Baja de tu cuenta en TechNovaLD
+                Body: Hola {},
+                      Tu cuenta en TechNovaLD ha sido dada de baja.
+                      Motivo: {}
+                      La cuenta queda desactivada; tus datos no se eliminan.
+                      Si crees que se trata de un error, contacta con soporte.
+                ============================""", email, nombre, motivo);
+    }
 }

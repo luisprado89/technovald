@@ -12,4 +12,13 @@ public interface EmailService {
      * @param nuevaPassword contraseña temporal generada.
      */
     void sendPasswordResetEmail(String email, String username, String nombre, String nuevaPassword);
+
+    /**
+     * Notifica al cliente que su cuenta ha sido dada de baja.
+     *
+     * @param email  email del destinatario.
+     * @param nombre nombre de pila del destinatario.
+     * @param motivo motivo indicado por el cliente.
+     */
+    void sendBajaCuentaEmail(String email, String nombre, String motivo);
 }

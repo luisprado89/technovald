@@ -1,5 +1,6 @@
 package com.technovald.controller;
 
+import com.technovald.dto.request.BajaCuentaClienteRequest;
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteRegistroResponse;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -104,5 +106,24 @@ public class ClienteController {
 
         return ResponseEntity.ok(
                 clienteService.updateMyCliente(userDetails.getUsername(), clienteUpdateRequest));
+    }
+
+    /**
+     * Da de baja lógicamente la cuenta del cliente autenticado.
+     *
+     * <p>El cliente no envía su id: se resuelve desde el JWT. La cuenta se
+     * desactiva, pero sus datos no se eliminan.</p>
+     *
+     * @param userDetails usuario autenticado.
+     * @param bajaCuentaClienteRequest     motivo indicado por el cliente.
+     * @return 204 No Content.
+     */
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> desactivarCuentaPropiaCliente(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody BajaCuentaClienteRequest bajaCuentaClienteRequest) {
+
+        clienteService.desactivarCuentaPropiaCliente(userDetails.getUsername(), bajaCuentaClienteRequest);
+        return ResponseEntity.noContent().build();
     }
 }

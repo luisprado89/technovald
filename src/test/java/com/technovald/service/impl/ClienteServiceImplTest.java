@@ -1,5 +1,6 @@
 package com.technovald.service.impl;
 
+import com.technovald.dto.request.BajaCuentaClienteRequest;
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteAdminResponse;
@@ -18,6 +19,7 @@ import com.technovald.repository.mysql.UsuarioRepository;
 import com.technovald.security.CredentialGenerator;
 import com.technovald.security.CustomUserDetailsService;
 import com.technovald.security.JwtService;
+import com.technovald.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -43,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -60,6 +64,7 @@ class ClienteServiceImplTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private CustomUserDetailsService customUserDetailsService;
     @Mock private JwtService jwtService;
+    @Mock private EmailService emailService;
 
     @InjectMocks private ClienteServiceImpl clienteService;
 
@@ -225,5 +230,41 @@ class ClienteServiceImplTest {
         verify(clienteRepository).save(cliente);
         verify(personaRepository).save(persona);
         verify(usuarioRepository).save(usuario);
+    }
+
+    @Test
+    void desactivaCuentaPropiaYNotificaElMotivo() {
+        when(usuarioRepository.findByUsernameAndActivoTrue("ana.garcia"))
+                .thenReturn(Optional.of(usuario));
+        when(clienteRepository.findByPersonaIdAndActivoTrue(1L))
+                .thenReturn(Optional.of(cliente));
+
+        clienteService.desactivarCuentaPropiaCliente(
+                "ana.garcia",
+                new BajaCuentaClienteRequest("No me gusta la tienda"));
+
+        assertFalse(cliente.getActivo());
+        assertFalse(persona.getActivo());
+        assertFalse(usuario.getActivo());
+        verify(emailService).sendBajaCuentaEmail(
+                "ana@test.local", "Ana", "No me gusta la tienda");
+    }
+
+    @Test
+    void laBajaPropiaNoSeRevierteSiFallaElCorreo() {
+        when(usuarioRepository.findByUsernameAndActivoTrue("ana.garcia"))
+                .thenReturn(Optional.of(usuario));
+        when(clienteRepository.findByPersonaIdAndActivoTrue(1L))
+                .thenReturn(Optional.of(cliente));
+        doThrow(new RuntimeException("SMTP caído"))
+                .when(emailService).sendBajaCuentaEmail(any(), any(), any());
+
+        assertDoesNotThrow(() -> clienteService.desactivarCuentaPropiaCliente(
+                "ana.garcia",
+                new BajaCuentaClienteRequest("Motivo de prueba")));
+
+        assertFalse(cliente.getActivo());
+        assertFalse(persona.getActivo());
+        assertFalse(usuario.getActivo());
     }
 }

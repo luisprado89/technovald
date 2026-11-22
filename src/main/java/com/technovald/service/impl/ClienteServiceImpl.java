@@ -1,5 +1,6 @@
 package com.technovald.service.impl;
 
+import com.technovald.dto.request.BajaCuentaClienteRequest;
 import com.technovald.dto.request.ClienteRegistroRequest;
 import com.technovald.dto.request.ClienteUpdateRequest;
 import com.technovald.dto.response.ClienteAdminResponse;
@@ -20,6 +21,7 @@ import com.technovald.security.CredentialGenerator;
 import com.technovald.security.CustomUserDetailsService;
 import com.technovald.security.JwtService;
 import com.technovald.service.ClienteService;
+import com.technovald.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -27,6 +29,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Locale;
 
@@ -57,6 +61,7 @@ public class ClienteServiceImpl implements ClienteService {
 
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtService jwtService;
+    private final EmailService emailService;
 
     /**
      * <p>Pasos:</p>
@@ -269,6 +274,70 @@ public class ClienteServiceImpl implements ClienteService {
     public void desactivarCliente(Long id) {
         cambiarEstadoCliente(clientePorId(id), false);
         log.info("Cliente desactivado: id {}", id);
+    }
+
+    /**
+     * Baja lógica solicitada por el propio cliente autenticado. No elimina
+     * datos: desactiva cliente, persona y usuario para impedir nuevos accesos.
+     */
+    @Override
+    @Transactional
+    public void desactivarCuentaPropiaCliente(String username, BajaCuentaClienteRequest bajaCuentaClienteRequest) {
+        Cliente cliente = obtenerClientePorUsername(username);
+
+        if (!Boolean.TRUE.equals(cliente.getActivo())) {
+            log.info("El cliente '{}' ya estaba inactivo; no se repite la baja", username);
+            return;
+        }
+
+        Persona persona = cliente.getPersona();
+        String email = persona.getEmail();
+        String nombre = persona.getNombre();
+        String motivo = bajaCuentaClienteRequest.getMotivo().trim();
+
+        cambiarEstadoCliente(cliente, false);
+        programarNotificacionBaja(cliente.getId(), email, nombre, motivo);
+
+        log.info("Baja solicitada por el cliente '{}' (cliente id {}): cuenta desactivada",
+                username, cliente.getId());
+    }
+
+    /**
+     * Programa el correo de baja después del commit. Así no se envía una
+     * notificación si la transacción finalmente no se confirma.
+     */
+    private void programarNotificacionBaja(Long clienteId, String email,
+                                           String nombre, String motivo) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            notificarBaja(clienteId, email, nombre, motivo);
+                        }
+                    });
+            return;
+        }
+
+        notificarBaja(clienteId, email, nombre, motivo);
+    }
+
+    /**
+     * Envía el correo sin propagar el fallo: la baja ya está persistida.
+     */
+    private void notificarBaja(Long clienteId, String email,
+                               String nombre, String motivo) {
+        if (email == null || email.isBlank()) {
+            log.warn("Cliente {} sin email; no se envía la notificación de baja", clienteId);
+            return;
+        }
+
+        try {
+            emailService.sendBajaCuentaEmail(email, nombre, motivo);
+        } catch (Exception ex) {
+            log.warn("No se pudo enviar el correo de baja al cliente {}: {}",
+                    clienteId, ex.getMessage());
+        }
     }
 
     /**

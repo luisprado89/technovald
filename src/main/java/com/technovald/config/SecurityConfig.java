@@ -123,6 +123,9 @@ public class SecurityConfig {
                         // Gestión de empleados: solo ADMIN
                         .requestMatchers("/api/admin/empleados/**").hasRole("ADMIN")
 
+                        // Baja propia del cliente autenticado
+                        .requestMatchers(HttpMethod.DELETE, "/api/clientes/me").hasRole("CLIENTE")
+
                         // Gestión de clientes: ADMIN y TRABAJADOR
                         .requestMatchers("/api/admin/clientes/**").hasAnyRole("ADMIN", "TRABAJADOR")
 
