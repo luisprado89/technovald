@@ -52,6 +52,7 @@ El control de acceso es **RBAC con JWT stateless** sobre tres roles: `ADMIN`, `T
 - **Descuento de stock atómico**: la comprobación y el decremento se resuelven en una sola sentencia SQL, lo que elimina la ventana de concurrencia que permitía sobrevender.
 - **Recepción de reposición idempotente**: transición de estado condicional + incremento de stock atómico, de forma que dos peticiones simultáneas no dupliquen la entrada de mercancía.
 - **Borrado lógico (soft delete) universal** mediante la columna `activo`, con baja en cascada gestionada por los servicios.
+- **Baja voluntaria con motivo y notificación**: `DELETE /api/clientes/me` identifica al cliente por el JWT, desactiva cliente, persona y usuario sin borrar datos, y envía un correo o log con el motivo indicado.
 - **Sincronización con Icecat** para descargar y mapear fichas técnicas reales a MongoDB, preservando los comentarios existentes al re-sincronizar.
 - **Reseñas con respuesta oficial** del personal y bandeja de comentarios pendientes, resuelta con un *pipeline* de agregación de MongoDB.
 - **Recuperación de contraseña por email**: simulación en consola en `dev` y Gmail SMTP en `prod`.
@@ -708,6 +709,8 @@ El compose publica MySQL en `3307` y MongoDB en `27018` para poder inspeccionarl
 
 El proyecto incluye **`TechNovaLdApplicationTests`**, un test de carga de contexto con `@SpringBootTest`. Arranca el contexto real, así que necesita MySQL, MongoDB y el `.env` disponibles; no hay un perfil de test separado.
 
+`ClienteServiceImplTest` cubre la baja propia, la desactivación de las tres filas, el envío del motivo al correo y la tolerancia a un fallo SMTP sin revertir la baja.
+
 ---
 
 ## 🔑 Administrador inicial y secretos
@@ -749,6 +752,40 @@ Base: `/api/clientes`
 | `POST` | `/api/clientes/register` | Público | Body: `ClienteRegistroRequest` | `ClienteRegistroResponse` | Registra un cliente y devuelve credenciales y token; `201`. |
 | `GET` | `/api/clientes/me` | Autenticado (CLIENTE) | — | `ClienteResponse` | Perfil del cliente autenticado. |
 | `PUT` | `/api/clientes/me` | Autenticado (CLIENTE) | Body: `ClienteUpdateRequest` | `ClienteResponse` | Actualiza email, teléfono y dirección. |
+| `DELETE` | `/api/clientes/me` | CLIENTE | Body: `BajaCuentaClienteRequest` | `Void` (`204`) | Baja lógica de la cuenta propia con motivo; no elimina datos. |
+
+#### Baja voluntaria del cliente
+
+El cliente autenticado solicita su baja sin enviar ningún ID. El `username` se obtiene del JWT y el motivo es obligatorio.
+
+```json
+{
+  "motivo": "No me gusta la tienda"
+}
+```
+
+Comportamiento:
+
+- Desactiva `Cliente`, `Persona` y `Usuario` (`activo = false`).
+- No elimina ningún registro.
+- El cliente ya no puede iniciar sesión ni usar su JWT anterior: el filtro JWT recarga el usuario activo en cada petición.
+- El catálogo público sigue siendo visible sin autenticación; lo que queda bloqueado es la cuenta y las rutas autenticadas.
+- El correo se envía **después del commit** de la transacción.
+- En `dev`, `EmailServiceLogImpl` imprime el correo en consola; en `prod`, `EmailServiceSmtpImpl` lo envía por Gmail SMTP.
+- El correo de baja es síncrono para que un fallo SMTP se registre con `log.warn` sin revertir la baja.
+
+Ejemplo con PowerShell:
+
+```powershell
+$token = "<JWT_DEL_CLIENTE>"
+$body = @{ motivo = "No me gusta la tienda" } | ConvertTo-Json
+
+Invoke-RestMethod -Method Delete `
+  -Uri http://localhost:8080/api/clientes/me `
+  -Headers @{ Authorization = "Bearer $token" } `
+  -ContentType "application/json" `
+  -Body $body
+```
 
 ### AdminClienteController
 
@@ -897,6 +934,7 @@ Base: `/api/stats`
 | `ChangePasswordRequest` | `currentPassword`, `newPassword` |
 | `ClienteRegistroRequest` | `nombre`, `apellido`, `dni`, `email`, `telefono`, `direccion` |
 | `ClienteUpdateRequest` | `email`, `telefono`, `direccion` |
+| `BajaCuentaClienteRequest` | `motivo` (obligatorio, máximo 500 caracteres) |
 | `EmpleadoRegistroRequest` | `nombre`, `apellido`, `dni`, `email`, `telefono`, `direccion`, `rol` (`RolUsuario`) |
 | `EmpleadoUpdateRequest` | `nombre`, `apellido`, `email`, `telefono`, `direccion`, `rol` (`RolUsuario`) |
 | `CategoriaRequest` | `nombre`, `descripcion` |
@@ -1345,7 +1383,7 @@ flowchart LR
 - ✅ Login, recuperación de contraseña y cambio de contraseña con invalidación de tokens (`tokenVersion`).
 - ✅ Correo de recuperación: simulado en `dev` y Gmail SMTP en `prod`.
 - ✅ Administrador inicial desde `.env`, con ficha de empleado asociada.
-- ✅ Clientes: alta pública, perfil propio, listado paginado, detalle, edición, baja administrativa y reactivación.
+- ✅ Clientes: alta pública, perfil propio, listado paginado, detalle, edición, baja administrativa, reactivación y baja voluntaria con motivo y notificación.
 - ✅ Empleados: alta con credenciales, directorio, detalle, edición, baja, reactivación y reseteo de contraseña.
 - ✅ Categorías: listado, alta, edición, baja y reactivación.
 - ✅ Proveedores: listado, activos, alta, edición, baja y reactivación.
@@ -1363,9 +1401,7 @@ flowchart LR
 
 ### ❌ Pendiente para la entrega final
 
-- ❌ Baja solicitada por el propio cliente, con confirmación de identidad y comunicación conforme al RGPD.
-- ❌ Notificación transaccional de baja por correo, diferenciada del correo de recuperación.
-- ❌ Endurecimiento del servicio de correo: implementaciones separadas para registro y SMTP, plantillas, reintentos y aislamiento de fallos.
+- ❌ Endurecimiento del servicio de correo: plantillas transaccionales, reintentos y aislamiento de fallos.
 - ❌ Reautenticación, limitación de intentos, rotación de secretos y auditoría de accesos.
 - ❌ Panel/dashboard de métricas de ventas: gráficos, ingresos y evolución temporal.
 - ❌ Subida y almacenamiento de imágenes: hoy el catálogo guarda URLs.
