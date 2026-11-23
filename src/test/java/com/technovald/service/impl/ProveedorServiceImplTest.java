@@ -67,7 +67,7 @@ class ProveedorServiceImplTest {
     @Test
     void creaProveedorNormalizandoCifYEmail() {
         ProveedorResponse respuesta = ProveedorResponse.builder().id(2L).build();
-        when(proveedorRepository.existsByCifIgnoreCase("B12345678")).thenReturn(false);
+        when(proveedorRepository.existsByCif("B12345678")).thenReturn(false);
         when(proveedorMapper.toResponse(any(Proveedor.class))).thenReturn(respuesta);
 
         ProveedorResponse resultado = proveedorService.crearProveedor(request());
@@ -83,7 +83,7 @@ class ProveedorServiceImplTest {
 
     @Test
     void rechazaCifDuplicado() {
-        when(proveedorRepository.existsByCifIgnoreCase("B12345678")).thenReturn(true);
+        when(proveedorRepository.existsByCif("B12345678")).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> proveedorService.crearProveedor(request()));
@@ -128,7 +128,7 @@ class ProveedorServiceImplTest {
                 .direccion("Calle Vigo 1")
                 .build();
         when(proveedorRepository.findById(1L)).thenReturn(Optional.of(proveedor));
-        when(proveedorRepository.existsByCifIgnoreCaseAndIdNot("B99999999", 1L)).thenReturn(true);
+        when(proveedorRepository.existsByCifAndIdNot("B99999999", 1L)).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> proveedorService.actualizarProveedor(1L, request));

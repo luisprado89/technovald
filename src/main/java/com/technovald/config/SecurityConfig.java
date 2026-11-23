@@ -175,6 +175,9 @@ public class SecurityConfig {
                         // Cambio de contraseña de un usuario autenticado
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
+                        // Red de seguridad: cualquier /api/admin/** sin regla propia exige staff.
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "TRABAJADOR")
+
                         // El resto requiere estar autenticado
                         .anyRequest().authenticated()
                 )

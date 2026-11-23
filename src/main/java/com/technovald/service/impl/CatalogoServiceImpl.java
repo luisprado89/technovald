@@ -12,6 +12,11 @@ import com.technovald.repository.mysql.ProductoInventarioRepository;
 import com.technovald.service.CatalogoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -38,6 +43,7 @@ public class CatalogoServiceImpl implements CatalogoService {
     private final ProductoMongoRepository productoMongoRepository;
     private final ProductoInventarioRepository productoInventarioRepository;
     private final ProductoCatalogoMapper productoCatalogoMapper;
+    private final MongoTemplate mongoTemplate;
 
     /**
      * Devuelve las fichas activas para las tarjetas del catálogo.
@@ -91,10 +97,33 @@ public class CatalogoServiceImpl implements CatalogoService {
         ProductoDocumento documento = productoCatalogoMapper.toDocumento(request, existente);
         documento.setFechaSincronizacion(LocalDateTime.now());
 
-        ProductoDocumento guardado = productoMongoRepository.save(documento);
+        mongoTemplate.upsert(
+                Query.query(Criteria.where("ean").is(ean)),
+                actualizacionSinComentarios(documento),
+                ProductoDocumento.class);
+
+        // Relectura para obtener el _id generado en un alta nueva.
+        ProductoDocumento guardado = productoMongoRepository.findByEan(ean)
+                .orElseThrow(() -> new IllegalStateException(
+                        "La ficha de catálogo no se pudo recuperar tras el upsert. EAN: " + ean));
+
         log.info("Ficha de catálogo guardada: EAN {} (id {})", ean, guardado.getId());
 
         return productoCatalogoMapper.toDetalle(guardado, buscarInventario(ean));
+    }
+
+    /**
+     * {@code $set} de todos los campos de la ficha menos {@code _id} y {@code comentarios}.
+     */
+    private Update actualizacionSinComentarios(ProductoDocumento documento) {
+        Document campos = new Document();
+        mongoTemplate.getConverter().write(documento, campos);
+        campos.remove("_id");
+        campos.remove("comentarios");
+
+        Update update = new Update();
+        campos.forEach(update::set);
+        return update;
     }
 
     /**
@@ -118,11 +147,11 @@ public class CatalogoServiceImpl implements CatalogoService {
     /**
      * Busca el producto de inventario asociado a un EAN.
      *
-     * @param ean EAN de la ficha.
+     * @param ean EAN ya normalizado a mayúsculas.
      * @return el producto, o {@code null} si no está en el inventario.
      */
     private ProductoInventario buscarInventario(String ean) {
-        return productoInventarioRepository.findByEanIgnoreCase(ean).orElse(null);
+        return productoInventarioRepository.findByEan(ean).orElse(null);
     }
 
     /**

@@ -53,7 +53,7 @@ public class InventarioServiceImpl implements InventarioService {
     public ProductoInventarioResponse crearProducto(ProductoInventarioRequest productoInventarioRequest) {
         String ean = productoMapper.normalizarEan(productoInventarioRequest.getEan());
 
-        if (productoRepository.existsByEanIgnoreCase(ean)) {
+        if (productoRepository.existsByEan(ean)) {
             throw new BusinessRuleException("Ya existe un producto con ese EAN");
         }
 

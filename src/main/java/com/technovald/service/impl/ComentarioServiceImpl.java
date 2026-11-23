@@ -17,13 +17,17 @@ import com.technovald.repository.mysql.ClienteRepository;
 import com.technovald.repository.mysql.ProductoInventarioRepository;
 import com.technovald.repository.mysql.UsuarioRepository;
 import com.technovald.service.ComentarioService;
+import com.mongodb.client.result.UpdateResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,7 +41,7 @@ import java.util.stream.Collectors;
  * <p>
  * Las reseñas viven dentro del documento del producto en MongoDB. La
  * transacción es la de JPA y sirve para las lecturas de MySQL (usuario,
- * cliente, producto); el {@code save} de Mongo es atómico por documento.
+ * cliente, producto). Las escrituras usan operadores atómicos.
  * </p>
  */
 @Service
@@ -50,6 +54,7 @@ public class ComentarioServiceImpl implements ComentarioService {
     private final UsuarioRepository usuarioRepository;
     private final ClienteRepository clienteRepository;
     private final ComentarioMapper comentarioMapper;
+    private final MongoTemplate mongoTemplate;
 
     /**
      * Crea la reseña y la añade al array del producto.
@@ -74,10 +79,6 @@ public class ComentarioServiceImpl implements ComentarioService {
                 .findByIdAndActivoTrue(request.getProductoInventarioId())
                 .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado en inventario"));
 
-        ProductoDocumento documento = productoMongoRepository.findByEan(producto.getEan())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Producto no encontrado en catálogo (MongoDB)"));
-
         Comentario comentario = Comentario.builder()
                 .id(UUID.randomUUID().toString())
                 .clienteId(cliente.getId())
@@ -88,11 +89,16 @@ public class ComentarioServiceImpl implements ComentarioService {
                 .activo(true)
                 .build();
 
-        if (documento.getComentarios() == null) {
-            documento.setComentarios(new ArrayList<>());
+        // $push atómico: no se reescribe el array, así que dos comentarios
+        // simultáneos no se pisan.
+        UpdateResult resultado = mongoTemplate.updateFirst(
+                Query.query(Criteria.where("ean").is(producto.getEan())),
+                new Update().push("comentarios", comentario),
+                ProductoDocumento.class);
+
+        if (resultado.getMatchedCount() == 0) {
+            throw new ResourceNotFoundException("Producto no encontrado en catálogo (MongoDB)");
         }
-        documento.getComentarios().add(comentario);
-        productoMongoRepository.save(documento);
 
         log.info("Reseña añadida al EAN {} por '{}'", producto.getEan(), username);
 
@@ -128,12 +134,33 @@ public class ComentarioServiceImpl implements ComentarioService {
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Comentario no encontrado en la ficha"));
 
-        comentario.setRespuestaOficial(request.getRespuestaOficial().trim());
-        comentario.setNombreRespondedor(nombreCompleto(usuario));
-        comentario.setUsernameRespondedor(usuario.getUsername());
-        comentario.setFechaRespuesta(LocalDateTime.now());
+        String respuesta = request.getRespuestaOficial().trim();
+        String nombreRespondedor = nombreCompleto(usuario);
+        LocalDateTime fechaRespuesta = LocalDateTime.now();
 
-        productoMongoRepository.save(documento);
+        // $set posicional sobre el comentario concreto; el filtro de la query
+        // localiza el documento y el arrayFilter el elemento.
+        Update update = new Update()
+                .set("comentarios.$[c].respuestaOficial", respuesta)
+                .set("comentarios.$[c].nombreRespondedor", nombreRespondedor)
+                .set("comentarios.$[c].usernameRespondedor", usuario.getUsername())
+                .set("comentarios.$[c].fechaRespuesta", fechaRespuesta)
+                .filterArray(Criteria.where("c._id").is(comentarioId));
+
+        UpdateResult resultado = mongoTemplate.updateFirst(
+                Query.query(Criteria.where("comentarios._id").is(comentarioId)),
+                update,
+                ProductoDocumento.class);
+
+        if (resultado.getMatchedCount() == 0) {
+            throw new ResourceNotFoundException("Comentario no encontrado");
+        }
+
+        // Refleja en la respuesta lo que se acaba de escribir, sin releer.
+        comentario.setRespuestaOficial(respuesta);
+        comentario.setNombreRespondedor(nombreRespondedor);
+        comentario.setUsernameRespondedor(usuario.getUsername());
+        comentario.setFechaRespuesta(fechaRespuesta);
 
         log.info("Respuesta oficial añadida a la reseña {} por '{}'", comentarioId, username);
 

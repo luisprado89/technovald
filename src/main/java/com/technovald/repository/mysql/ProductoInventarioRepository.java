@@ -29,14 +29,14 @@ public interface ProductoInventarioRepository extends JpaRepository<ProductoInve
             """)
     List<ProductoInventario> findLowStock();
 
-    /** Comprueba si ya existe un producto con ese EAN. */
-    boolean existsByEanIgnoreCase(String ean);
+    /** Comprueba si ya existe un producto con ese EAN (sin IgnoreCase, para usar uk_producto_ean). */
+    boolean existsByEan(String ean);
 
     /** Comprueba si el EAN pertenece a otro producto distinto (para la edición). */
-    boolean existsByEanIgnoreCaseAndIdNot(String ean, Long id);
+    boolean existsByEanAndIdNot(String ean, Long id);
 
-    /** Busca un producto del inventario por su EAN. */
-    Optional<ProductoInventario> findByEanIgnoreCase(String ean);
+    /** Busca un producto del inventario por su EAN (sin IgnoreCase, para usar uk_producto_ean). */
+    Optional<ProductoInventario> findByEan(String ean);
 
     /** Busca una lista de productos por sus EANs (para enriquecer el catálogo). */
     List<ProductoInventario> findAllByEanIn(Collection<String> eans);

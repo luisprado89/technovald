@@ -53,7 +53,7 @@ public class ProveedorServiceImpl implements ProveedorService {
     public ProveedorResponse crearProveedor(ProveedorRequest proveedorRequest) {
         String cif = proveedorRequest.getCif().trim().toUpperCase(Locale.ROOT);
 
-        if (proveedorRepository.existsByCifIgnoreCase(cif)) {
+        if (proveedorRepository.existsByCif(cif)) {
             throw new BusinessRuleException("Ya existe un proveedor con ese CIF");
         }
 
@@ -85,7 +85,7 @@ public class ProveedorServiceImpl implements ProveedorService {
         Proveedor proveedor = proveedorPorId(id);
         String cif = proveedorRequest.getCif().trim().toUpperCase(Locale.ROOT);
 
-        if (proveedorRepository.existsByCifIgnoreCaseAndIdNot(cif, id)) {
+        if (proveedorRepository.existsByCifAndIdNot(cif, id)) {
             throw new BusinessRuleException("Ya existe un proveedor con ese CIF");
         }
 

@@ -9,20 +9,31 @@ import com.technovald.exception.ResourceNotFoundException;
 import com.technovald.mapper.ProductoCatalogoMapper;
 import com.technovald.repository.mongo.ProductoMongoRepository;
 import com.technovald.repository.mysql.ProductoInventarioRepository;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.convert.MongoConverter;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.query.UpdateDefinition;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +45,8 @@ class CatalogoServiceImplTest {
     @Mock private ProductoMongoRepository productoMongoRepository;
     @Mock private ProductoInventarioRepository productoInventarioRepository;
     @Mock private ProductoCatalogoMapper productoCatalogoMapper;
+    @Mock private MongoTemplate mongoTemplate;
+    @Mock private MongoConverter mongoConverter;
 
     @InjectMocks private CatalogoServiceImpl catalogoService;
 
@@ -80,7 +93,7 @@ class CatalogoServiceImplTest {
         ProductoCatalogoDetalleResponse detalle = ProductoCatalogoDetalleResponse.builder()
                 .id("doc-1").ean("EAN1").build();
         when(productoMongoRepository.findByEanAndActivoTrue("EAN1")).thenReturn(Optional.of(documento));
-        when(productoInventarioRepository.findByEanIgnoreCase("EAN1")).thenReturn(Optional.of(inventario));
+        when(productoInventarioRepository.findByEan("EAN1")).thenReturn(Optional.of(inventario));
         when(productoCatalogoMapper.toDetalle(documento, inventario)).thenReturn(detalle);
 
         ProductoCatalogoDetalleResponse resultado = catalogoService.obtenerProductoCatalogoPorEan(" ean1 ");
@@ -106,13 +119,33 @@ class CatalogoServiceImplTest {
                 .id("doc-1").ean("EAN1").build();
         when(productoMongoRepository.findByEan("EAN1")).thenReturn(Optional.of(documento));
         when(productoCatalogoMapper.toDocumento(request, documento)).thenReturn(documento);
-        when(productoMongoRepository.save(documento)).thenReturn(documento);
-        when(productoInventarioRepository.findByEanIgnoreCase("EAN1")).thenReturn(Optional.of(inventario));
+        when(productoInventarioRepository.findByEan("EAN1")).thenReturn(Optional.of(inventario));
         when(productoCatalogoMapper.toDetalle(documento, inventario)).thenReturn(detalle);
+        when(mongoTemplate.getConverter()).thenReturn(mongoConverter);
+
+        // Simula el converter real: escribe _id, un campo normal y comentarios.
+        doAnswer(invocation -> {
+            Document campos = invocation.getArgument(1);
+            campos.put("_id", "doc-1");
+            campos.put("titulo", "Teclado Mod");
+            campos.put("comentarios", List.of());
+            return null;
+        }).when(mongoConverter).write(any(), any());
 
         ProductoCatalogoDetalleResponse resultado = catalogoService.guardarProductoCatalogo(request);
 
         assertSame(detalle, resultado);
-        verify(productoMongoRepository).save(documento);
+
+        ArgumentCaptor<UpdateDefinition> captor = ArgumentCaptor.forClass(UpdateDefinition.class);
+        verify(mongoTemplate).upsert(any(Query.class), captor.capture(), eq(ProductoDocumento.class));
+
+        Document set = (Document) ((Update) captor.getValue()).getUpdateObject().get("$set");
+        assertEquals("Teclado Mod", set.get("titulo"));
+        assertFalse(set.containsKey("_id"), "el _id no puede formar parte del $set");
+        assertFalse(set.containsKey("comentarios"),
+                "los comentarios no deben reescribirse: se perdería un comentario concurrente");
+
+        // La escritura ya no es un save() del documento completo.
+        verify(productoMongoRepository, never()).save(any(ProductoDocumento.class));
     }
 }

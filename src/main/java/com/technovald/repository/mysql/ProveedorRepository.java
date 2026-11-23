@@ -18,10 +18,10 @@ public interface ProveedorRepository extends JpaRepository<Proveedor, Long> {
     List<Proveedor> findAllByActivoTrueOrderByNombreEmpresaAsc();
 
     /** Comprueba si un CIF ya está registrado (ignorando mayúsculas/minúsculas). */
-    boolean existsByCifIgnoreCase(String cif);
+    boolean existsByCif(String cif);
 
     /** Comprueba si un CIF ya está registrado en otro proveedor distinto (para la edición). */
-    boolean existsByCifIgnoreCaseAndIdNot(String cif, Long id);
+    boolean existsByCifAndIdNot(String cif, Long id);
 
     /** Busca un proveedor activo por id (para la solicitud de reposición). */
     Optional<Proveedor> findByIdAndActivoTrue(Long id);

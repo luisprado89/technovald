@@ -1,5 +1,6 @@
 package com.technovald.dto.request;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.*;
@@ -23,5 +24,6 @@ public class SolicitudReposicionRequest {
     /** Unidades solicitadas. */
     @NotNull(message = "La cantidad es obligatoria")
     @Positive(message = "La cantidad debe ser mayor que 0")
+    @Max(value = 1_000_000, message = "La cantidad no puede superar 1.000.000 de unidades")
     private Integer cantidad;
 }

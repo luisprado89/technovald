@@ -1,7 +1,11 @@
 package com.technovald.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -11,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
@@ -25,8 +30,12 @@ import java.util.stream.Collectors;
  *   <li>{@link ResourceNotFoundException} → 404</li>
  *   <li>{@link BusinessRuleException} → 400</li>
  *   <li>{@link MethodArgumentNotValidException} → 400 (validación de DTOs)</li>
+ *   <li>{@link ConstraintViolationException} → 400 (validación de parámetros sueltos)</li>
  *   <li>{@link AuthenticationException} → 401 (credenciales incorrectas)</li>
+ *   <li>{@link AccountLockedException} → 423 (cuenta bloqueada temporalmente)</li>
  *   <li>{@link HttpMessageNotReadableException} → 400 (JSON ilegible)</li>
+ *   <li>{@link PropertyReferenceException} → 400 (parámetro de ordenación inexistente)</li>
+ *   <li>{@link DataIntegrityViolationException} → 409 (choque con una restricción UNIQUE/FK)</li>
  *   <li>{@link NoResourceFoundException} → 404 (ruta inexistente)</li>
  *   <li>Cualquier otra → 500</li>
  * </ul>
@@ -70,6 +79,35 @@ public class GlobalExceptionHandler {
         log.warn("Regla de negocio infringida (400) en {}: {}", request.getRequestURI(), e.getMessage());
 
         return build(HttpStatus.BAD_REQUEST, e.getMessage(), request);
+    }
+
+    /**
+     * Traduce {@link DataIntegrityViolationException} a HTTP 409 con mensaje genérico.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException e,
+                                                             HttpServletRequest request) {
+
+        log.warn("Conflicto de integridad (409) en {}: {}", request.getRequestURI(),
+                e.getMostSpecificCause().getMessage());
+
+        return build(HttpStatus.CONFLICT, "Ya existe un registro con esos datos", request);
+    }
+
+    /**
+     * Traduce {@link ConstraintViolationException} a HTTP 400.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e,
+                                                                   HttpServletRequest request) {
+
+        String message = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining(", "));
+
+        log.warn("Validación de parámetros fallida (400) en {}: {}", request.getRequestURI(), message);
+
+        return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
     /**
@@ -129,6 +167,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Traduce {@link AccountLockedException} a HTTP 423 con {@code Retry-After}.
+     */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountLocked(AccountLockedException e,
+                                                             HttpServletRequest request) {
+
+        LocalDateTime hasta = e.getBloqueadoHasta();
+        long segundos = (hasta == null)
+                ? 60L
+                : Math.max(1L, Duration.between(LocalDateTime.now(), hasta).getSeconds());
+
+        log.warn("Cuenta bloqueada (423) en {}: quedan {} segundos", request.getRequestURI(), segundos);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, String.valueOf(segundos));
+
+        return build(HttpStatus.LOCKED,
+                "La cuenta está bloqueada temporalmente por intentos fallidos. "
+                        + "Inténtalo de nuevo más tarde.", request, headers);
+    }
+
+    /**
      * Traduce {@link HttpMessageNotReadableException} a HTTP 400.
      *
      * <p>
@@ -151,6 +211,20 @@ public class GlobalExceptionHandler {
 
         return build(HttpStatus.BAD_REQUEST,
                 "El cuerpo de la petición no es un JSON válido o está vacío", request);
+    }
+
+    /**
+     * Traduce {@link PropertyReferenceException} a HTTP 400.
+     */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handlePropertyReference(PropertyReferenceException e,
+                                                                 HttpServletRequest request) {
+
+        String message = "Parámetro de ordenación no válido: '" + e.getPropertyName() + "'";
+
+        log.warn("Ordenación no válida (400) en {}: {}", request.getRequestURI(), message);
+
+        return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
     /**
@@ -252,6 +326,15 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
                                                 HttpServletRequest request) {
 
+        return build(status, message, request, HttpHeaders.EMPTY);
+    }
+
+    /**
+     * Construye la respuesta de error con el formato uniforme y cabeceras extra.
+     */
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
+                                                HttpServletRequest request, HttpHeaders headers) {
+
         ErrorResponse body = new ErrorResponse(
                 LocalDateTime.now(),
                 status.value(),
@@ -260,7 +343,7 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
 
-        return ResponseEntity.status(status).body(body);
+        return ResponseEntity.status(status).headers(headers).body(body);
     }
 
     /**

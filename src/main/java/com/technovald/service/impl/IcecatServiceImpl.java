@@ -53,7 +53,7 @@ public class IcecatServiceImpl implements IcecatService {
     public ProductoCatalogoDetalleResponse sincronizarProducto(String ean) {
         String normalizado = ean.trim().toUpperCase(Locale.ROOT);
 
-        ProductoInventario inventario = productoInventarioRepository.findByEanIgnoreCase(normalizado)
+        ProductoInventario inventario = productoInventarioRepository.findByEan(normalizado)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No hay producto en el inventario con EAN: " + normalizado));
 

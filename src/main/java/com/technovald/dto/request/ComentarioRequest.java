@@ -15,6 +15,7 @@ public class ComentarioRequest {
 
     /** Texto de la reseña. */
     @NotBlank(message = "El texto del comentario es obligatorio")
+    @Size(max = 2000, message = "El texto del comentario no puede superar los 2000 caracteres")
     private String texto;
 
     /** Estrellas de 1 a 5. */

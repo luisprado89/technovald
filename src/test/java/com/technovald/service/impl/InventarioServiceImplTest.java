@@ -76,7 +76,7 @@ class InventarioServiceImplTest {
         ProductoInventarioRequest request = request();
         ProductoInventarioResponse respuesta = ProductoInventarioResponse.builder().id(10L).build();
         when(productoMapper.normalizarEan(" 123 ")).thenReturn("123");
-        when(productoRepository.existsByEanIgnoreCase("123")).thenReturn(false);
+        when(productoRepository.existsByEan("123")).thenReturn(false);
         when(categoriaRepository.findById(1L)).thenReturn(Optional.of(categoria));
         when(proveedorRepository.findById(2L)).thenReturn(Optional.of(proveedor));
         when(productoMapper.toEntity(request, categoria, proveedor)).thenReturn(producto);
@@ -91,7 +91,7 @@ class InventarioServiceImplTest {
     @Test
     void rechazaEanDuplicado() {
         when(productoMapper.normalizarEan(" 123 ")).thenReturn("123");
-        when(productoRepository.existsByEanIgnoreCase("123")).thenReturn(true);
+        when(productoRepository.existsByEan("123")).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> inventarioService.crearProducto(request()));
@@ -104,7 +104,7 @@ class InventarioServiceImplTest {
     @Test
     void rechazaProductoSiLaCategoriaNoExiste() {
         when(productoMapper.normalizarEan(" 123 ")).thenReturn("123");
-        when(productoRepository.existsByEanIgnoreCase("123")).thenReturn(false);
+        when(productoRepository.existsByEan("123")).thenReturn(false);
         when(categoriaRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> inventarioService.crearProducto(request()));

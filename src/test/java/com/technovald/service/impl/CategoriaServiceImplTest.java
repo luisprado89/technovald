@@ -69,7 +69,7 @@ class CategoriaServiceImplTest {
                 .build();
         CategoriaResponse respuesta = CategoriaResponse.builder().id(2L).build();
 
-        when(categoriaRepository.existsByNombreIgnoreCase("Redes")).thenReturn(false);
+        when(categoriaRepository.existsByNombre("Redes")).thenReturn(false);
         when(categoriaMapper.toResponse(any(Categoria.class))).thenReturn(respuesta);
 
         CategoriaResponse resultado = categoriaService.crearCategoria(request);
@@ -85,7 +85,7 @@ class CategoriaServiceImplTest {
     @Test
     void rechazaCategoriaDuplicada() {
         CategoriaRequest request = CategoriaRequest.builder().nombre("Redes").build();
-        when(categoriaRepository.existsByNombreIgnoreCase("Redes")).thenReturn(true);
+        when(categoriaRepository.existsByNombre("Redes")).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> categoriaService.crearCategoria(request));
@@ -98,7 +98,7 @@ class CategoriaServiceImplTest {
     void rechazaActualizacionConNombreDeOtraCategoria() {
         CategoriaRequest request = CategoriaRequest.builder().nombre("Servidores").build();
         when(categoriaRepository.findById(1L)).thenReturn(Optional.of(categoria));
-        when(categoriaRepository.existsByNombreIgnoreCaseAndIdNot("Servidores", 1L)).thenReturn(true);
+        when(categoriaRepository.existsByNombreAndIdNot("Servidores", 1L)).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> categoriaService.actualizarCategoria(1L, request));

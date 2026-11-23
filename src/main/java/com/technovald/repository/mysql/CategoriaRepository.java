@@ -14,8 +14,8 @@ public interface CategoriaRepository extends JpaRepository<Categoria, Long> {
     List<Categoria> findAllByOrderByNombreAsc();
 
     /** MySQL compara sin distinguir mayúsculas ni acentos por la collation. */
-    boolean existsByNombreIgnoreCase(String nombre);
+    boolean existsByNombre(String nombre);
 
     /** Para editar: el mismo nombre no choca consigo mismo. */
-    boolean existsByNombreIgnoreCaseAndIdNot(String nombre, Long id);
+    boolean existsByNombreAndIdNot(String nombre, Long id);
 }

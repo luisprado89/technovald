@@ -43,7 +43,7 @@ public class CategoriaServiceImpl implements CategoriaService {
     public CategoriaResponse crearCategoria(CategoriaRequest categoriaRequest) {
         String nombre = categoriaRequest.getNombre().trim();
 
-        if (categoriaRepository.existsByNombreIgnoreCase(nombre)) {
+        if (categoriaRepository.existsByNombre(nombre)) {
             throw new BusinessRuleException("Ya existe una categoría con ese nombre");
         }
 
@@ -70,7 +70,7 @@ public class CategoriaServiceImpl implements CategoriaService {
         Categoria categoria = categoriaPorId(id);
         String nombre = categoriaRequest.getNombre().trim();
 
-        if (categoriaRepository.existsByNombreIgnoreCaseAndIdNot(nombre, id)) {
+        if (categoriaRepository.existsByNombreAndIdNot(nombre, id)) {
             throw new BusinessRuleException("Ya existe una categoría con ese nombre");
         }
 
