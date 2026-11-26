@@ -1,8 +1,10 @@
 package com.technovald.exception;
 
+import com.mongodb.MongoException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.BsonMaximumSizeExceededException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
@@ -36,6 +38,7 @@ import java.util.stream.Collectors;
  *   <li>{@link HttpMessageNotReadableException} → 400 (JSON ilegible)</li>
  *   <li>{@link PropertyReferenceException} → 400 (parámetro de ordenación inexistente)</li>
  *   <li>{@link DataIntegrityViolationException} → 409 (choque con una restricción UNIQUE/FK)</li>
+ *   <li>{@link MongoException} → 409 si es clave duplicada; 500 en el resto</li>
  *   <li>{@link NoResourceFoundException} → 404 (ruta inexistente)</li>
  *   <li>Cualquier otra → 500</li>
  * </ul>
@@ -268,6 +271,23 @@ public class GlobalExceptionHandler {
         log.warn("Fallo al consultar Icecat (503) en {}: {}", request.getRequestURI(), e.getMessage());
 
         return build(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), request);
+    }
+
+    /**
+     * Traduce {@link MongoException} a 409 si es clave duplicada y a 500 en el resto.
+     */
+    @ExceptionHandler({MongoException.class, BsonMaximumSizeExceededException.class})
+    public ResponseEntity<ErrorResponse> handleMongo(RuntimeException e, HttpServletRequest request) {
+
+        if (e instanceof MongoException mongo && mongo.getCode() == 11000) {
+            log.warn("Clave duplicada en MongoDB (409) en {}: {}", request.getRequestURI(), e.getMessage());
+            return build(HttpStatus.CONFLICT, "Ya existe un registro con esos datos", request);
+        }
+
+        log.error("Error de MongoDB (500) en {}", request.getRequestURI(), e);
+
+        return build(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Error al procesar la solicitud en el catálogo. Inténtalo de nuevo más tarde.", request);
     }
 
     /**

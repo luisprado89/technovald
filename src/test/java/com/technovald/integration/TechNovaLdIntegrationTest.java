@@ -1,8 +1,12 @@
 package com.technovald.integration;
 
 import com.technovald.document.ProductoDocumento;
+import com.technovald.dto.request.ComentarioRequest;
 import com.technovald.dto.request.DetallePedidoRequest;
 import com.technovald.dto.request.PedidoRequest;
+import com.technovald.dto.request.ProductoCatalogoRequest;
+import com.technovald.dto.request.RespuestaComentarioRequest;
+import com.technovald.dto.response.ComentarioResponse;
 import com.technovald.dto.response.PedidoResponse;
 import com.technovald.dto.response.ProductoCatalogoDetalleResponse;
 import com.technovald.dto.response.ProductoMasVendidoResponse;
@@ -31,6 +35,7 @@ import com.technovald.repository.mysql.ProveedorRepository;
 import com.technovald.repository.mysql.SolicitudReposicionRepository;
 import com.technovald.repository.mysql.UsuarioRepository;
 import com.technovald.service.CatalogoService;
+import com.technovald.service.ComentarioService;
 import com.technovald.service.EstadisticaService;
 import com.technovald.service.PedidoService;
 import com.technovald.service.SolicitudReposicionService;
@@ -46,6 +51,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -88,6 +94,7 @@ class TechNovaLdIntegrationTest {
     @Autowired private SolicitudReposicionService solicitudService;
     @Autowired private EstadisticaService estadisticaService;
     @Autowired private CatalogoService catalogoService;
+    @Autowired private ComentarioService comentarioService;
 
     @Autowired private PersonaRepository personaRepository;
     @Autowired private UsuarioRepository usuarioRepository;
@@ -188,6 +195,51 @@ class TechNovaLdIntegrationTest {
                         .cantidad(cantidad)
                         .build()))
                 .build();
+    }
+
+    /** Guarda una ficha mínima en MongoDB para el EAN del producto. */
+    private ProductoDocumento crearFichaEnCatalogo(ProductoInventario producto) {
+        return productoMongoRepository.save(ProductoDocumento.builder()
+                .ean(producto.getEan())
+                .titulo("Producto de integración")
+                .nombreCorto(producto.getNombreCorto())
+                .marca("Marca")
+                .categoria("Categoría")
+                .activo(true)
+                .build());
+    }
+
+    private ComentarioRequest comentarioDe(ProductoInventario producto, String texto) {
+        return ComentarioRequest.builder()
+                .productoInventarioId(producto.getId())
+                .texto(texto)
+                .valoracion(5)
+                .build();
+    }
+
+    /** Lanza las tareas a la vez y espera a que terminen todas. */
+    private void ejecutarALaVez(List<Runnable> tareas) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(tareas.size());
+        CountDownLatch listos = new CountDownLatch(tareas.size());
+        CountDownLatch salida = new CountDownLatch(1);
+        List<Future<?>> futuros = new ArrayList<>();
+
+        for (Runnable tarea : tareas) {
+            futuros.add(pool.submit(() -> {
+                listos.countDown();
+                salida.await(5, TimeUnit.SECONDS);
+                tarea.run();
+                return null;
+            }));
+        }
+
+        assertTrue(listos.await(5, TimeUnit.SECONDS));
+        salida.countDown();
+
+        for (Future<?> futuro : futuros) {
+            futuro.get(15, TimeUnit.SECONDS);
+        }
+        pool.shutdownNow();
     }
 
     @Test
@@ -347,5 +399,67 @@ class TechNovaLdIntegrationTest {
 
         assertThrows(DataIntegrityViolationException.class,
                 () -> personaRepository.saveAndFlush(duplicada));
+    }
+
+    @Test
+    void dosComentariosConcurrentesNoSePierden() throws Exception {
+        Usuario cliente = crearCliente("comentaconcurrente");
+        ProductoInventario producto = crearProducto(10, new BigDecimal("10.00"));
+        crearFichaEnCatalogo(producto);
+
+        ComentarioRequest request = comentarioDe(producto, "Comentario concurrente");
+
+        ejecutarALaVez(List.of(
+                () -> comentarioService.crearComentario(request, cliente.getUsername()),
+                () -> comentarioService.crearComentario(request, cliente.getUsername())));
+
+        ProductoDocumento ficha = productoMongoRepository.findByEan(producto.getEan()).orElseThrow();
+        assertEquals(2, ficha.getComentarios().size());
+    }
+
+    @Test
+    void dosRespuestasConcurrentesSeConservan() throws Exception {
+        Usuario cliente = crearCliente("respuestaconcurrente");
+        String staff = crearEmpleado().getPersona().getUsuario().getUsername();
+        ProductoInventario producto = crearProducto(10, new BigDecimal("10.00"));
+        crearFichaEnCatalogo(producto);
+
+        ComentarioResponse primero = comentarioService.crearComentario(
+                comentarioDe(producto, "Primera"), cliente.getUsername());
+        ComentarioResponse segundo = comentarioService.crearComentario(
+                comentarioDe(producto, "Segunda"), cliente.getUsername());
+
+        ejecutarALaVez(List.of(
+                () -> comentarioService.responderComentario(primero.getId(),
+                        new RespuestaComentarioRequest("Respuesta A"), staff),
+                () -> comentarioService.responderComentario(segundo.getId(),
+                        new RespuestaComentarioRequest("Respuesta B"), staff)));
+
+        ProductoDocumento ficha = productoMongoRepository.findByEan(producto.getEan()).orElseThrow();
+        assertTrue(ficha.getComentarios().stream()
+                .anyMatch(c -> primero.getId().equals(c.getId()) && c.getRespuestaOficial() != null));
+        assertTrue(ficha.getComentarios().stream()
+                .anyMatch(c -> segundo.getId().equals(c.getId()) && c.getRespuestaOficial() != null));
+    }
+
+    @Test
+    void guardarLaFichaMientrasSeComentaNoPierdeElComentario() throws Exception {
+        Usuario cliente = crearCliente("catalogoconcurrente");
+        ProductoInventario producto = crearProducto(10, new BigDecimal("10.00"));
+        crearFichaEnCatalogo(producto);
+
+        ProductoCatalogoRequest request = ProductoCatalogoRequest.builder()
+                .ean(producto.getEan())
+                .titulo("Título actualizado")
+                .build();
+
+        ejecutarALaVez(List.of(
+                () -> catalogoService.guardarProductoCatalogo(request),
+                () -> comentarioService.crearComentario(
+                        comentarioDe(producto, "Sobrevive al guardado"), cliente.getUsername())));
+
+        ProductoDocumento ficha = productoMongoRepository.findByEan(producto.getEan()).orElseThrow();
+        assertEquals(1, ficha.getComentarios().size());
+        assertEquals("Título actualizado", ficha.getTitulo());
     }
 }

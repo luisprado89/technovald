@@ -1,5 +1,6 @@
 package com.technovald.exception;
 
+import com.mongodb.MongoException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -106,5 +107,24 @@ class GlobalExceptionHandlerTest {
         assertNotNull(retryAfter, "el 423 debe indicar cuándo reintentar");
         long segundos = Long.parseLong(retryAfter);
         assertTrue(segundos > 0 && segundos <= 15 * 60);
+    }
+
+    @Test
+    void traduceClaveDuplicadaDeMongoA409() {
+        ResponseEntity<GlobalExceptionHandler.ErrorResponse> response =
+                handler.handleMongo(new MongoException(11000, "E11000 duplicate key"), request);
+
+        assertEquals(409, response.getStatusCode().value());
+        assertEquals("Ya existe un registro con esos datos", response.getBody().message());
+    }
+
+    @Test
+    void traduceErrorDeMongoA500ConMensajeGenerico() {
+        ResponseEntity<GlobalExceptionHandler.ErrorResponse> response =
+                handler.handleMongo(new MongoException(2, "fallo interno del driver"), request);
+
+        assertEquals(500, response.getStatusCode().value());
+        assertEquals("Error al procesar la solicitud en el catálogo. Inténtalo de nuevo más tarde.",
+                response.getBody().message());
     }
 }

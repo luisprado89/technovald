@@ -7,16 +7,15 @@ import com.technovald.dto.response.ProductoCatalogoResumenResponse;
 import com.technovald.entity.ProductoInventario;
 import com.technovald.exception.ResourceNotFoundException;
 import com.technovald.mapper.ProductoCatalogoMapper;
+import com.technovald.repository.mongo.ProductoDocumentoUpdates;
 import com.technovald.repository.mongo.ProductoMongoRepository;
 import com.technovald.repository.mysql.ProductoInventarioRepository;
 import com.technovald.service.CatalogoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -99,7 +98,7 @@ public class CatalogoServiceImpl implements CatalogoService {
 
         mongoTemplate.upsert(
                 Query.query(Criteria.where("ean").is(ean)),
-                actualizacionSinComentarios(documento),
+                ProductoDocumentoUpdates.sinComentarios(mongoTemplate, documento),
                 ProductoDocumento.class);
 
         // Relectura para obtener el _id generado en un alta nueva.
@@ -110,20 +109,6 @@ public class CatalogoServiceImpl implements CatalogoService {
         log.info("Ficha de catálogo guardada: EAN {} (id {})", ean, guardado.getId());
 
         return productoCatalogoMapper.toDetalle(guardado, buscarInventario(ean));
-    }
-
-    /**
-     * {@code $set} de todos los campos de la ficha menos {@code _id} y {@code comentarios}.
-     */
-    private Update actualizacionSinComentarios(ProductoDocumento documento) {
-        Document campos = new Document();
-        mongoTemplate.getConverter().write(documento, campos);
-        campos.remove("_id");
-        campos.remove("comentarios");
-
-        Update update = new Update();
-        campos.forEach(update::set);
-        return update;
     }
 
     /**

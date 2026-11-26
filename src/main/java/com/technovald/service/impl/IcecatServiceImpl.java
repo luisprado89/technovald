@@ -9,11 +9,15 @@ import com.technovald.entity.ProductoInventario;
 import com.technovald.exception.ResourceNotFoundException;
 import com.technovald.mapper.IcecatMapper;
 import com.technovald.mapper.ProductoCatalogoMapper;
+import com.technovald.repository.mongo.ProductoDocumentoUpdates;
 import com.technovald.repository.mongo.ProductoMongoRepository;
 import com.technovald.repository.mysql.ProductoInventarioRepository;
 import com.technovald.service.IcecatService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -40,6 +44,7 @@ public class IcecatServiceImpl implements IcecatService {
     private final ProductoMongoRepository productoMongoRepository;
     private final ProductoInventarioRepository productoInventarioRepository;
     private final ProductoCatalogoMapper productoCatalogoMapper;
+    private final MongoTemplate mongoTemplate;
 
     /**
      * Sincroniza la ficha de un EAN y la guarda en MongoDB.
@@ -62,7 +67,18 @@ public class IcecatServiceImpl implements IcecatService {
         ProductoDocumento documento = icecatMapper.toDocumento(respuesta, normalizado, existente);
         documento.setFechaSincronizacion(LocalDateTime.now());
 
-        ProductoDocumento guardado = productoMongoRepository.save(documento);
+        // $set sin _id ni comentarios: una sincronización concurrente con una
+        // reseña no la borra.
+        mongoTemplate.upsert(
+                Query.query(Criteria.where("ean").is(normalizado)),
+                ProductoDocumentoUpdates.sinComentarios(mongoTemplate, documento),
+                ProductoDocumento.class);
+
+        // Relectura para obtener el _id generado en un alta nueva.
+        ProductoDocumento guardado = productoMongoRepository.findByEan(normalizado)
+                .orElseThrow(() -> new IllegalStateException(
+                        "No se pudo recuperar la ficha sincronizada. EAN: " + normalizado));
+
         log.info("Ficha sincronizada desde Icecat: EAN {}", normalizado);
 
         return productoCatalogoMapper.toDetalle(guardado, inventario);

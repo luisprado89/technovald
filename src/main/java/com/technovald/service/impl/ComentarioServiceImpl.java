@@ -20,6 +20,7 @@ import com.technovald.service.ComentarioService;
 import com.mongodb.client.result.UpdateResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -56,6 +57,10 @@ public class ComentarioServiceImpl implements ComentarioService {
     private final ComentarioMapper comentarioMapper;
     private final MongoTemplate mongoTemplate;
 
+    /** Tope de reseñas por producto, para que el documento no crezca sin control. */
+    @Value("${app.catalogo.max-comentarios:50}")
+    private int maxComentarios;
+
     /**
      * Crea la reseña y la añade al array del producto.
      *
@@ -63,7 +68,7 @@ public class ComentarioServiceImpl implements ComentarioService {
      * @param username username del cliente.
      * @return la reseña creada.
      * @throws ResourceNotFoundException si el usuario, el producto o la ficha no existen.
-     * @throws BusinessRuleException     si el usuario no tiene perfil de cliente.
+     * @throws BusinessRuleException     si el usuario no tiene perfil de cliente o el producto alcanzó el tope de reseñas.
      */
     @Override
     @Transactional
@@ -78,6 +83,15 @@ public class ComentarioServiceImpl implements ComentarioService {
         ProductoInventario producto = productoInventarioRepository
                 .findByIdAndActivoTrue(request.getProductoInventarioId())
                 .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado en inventario"));
+
+        ProductoDocumento documento = productoMongoRepository.findByEan(producto.getEan())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Producto no encontrado en catálogo (MongoDB)"));
+
+        int comentariosActuales = documento.getComentarios() == null ? 0 : documento.getComentarios().size();
+        if (comentariosActuales >= maxComentarios) {
+            throw new BusinessRuleException("Este producto ha alcanzado el límite máximo de reseñas");
+        }
 
         Comentario comentario = Comentario.builder()
                 .id(UUID.randomUUID().toString())

@@ -17,6 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.convert.MongoConverter;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.UpdateDefinition;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +28,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,6 +43,8 @@ class IcecatServiceImplTest {
     @Mock private ProductoMongoRepository productoMongoRepository;
     @Mock private ProductoInventarioRepository productoInventarioRepository;
     @Mock private ProductoCatalogoMapper productoCatalogoMapper;
+    @Mock private MongoTemplate mongoTemplate;
+    @Mock private MongoConverter mongoConverter;
 
     @InjectMocks private IcecatServiceImpl icecatService;
 
@@ -58,15 +66,17 @@ class IcecatServiceImplTest {
                 .id("doc-1").ean("EAN1").build();
         when(productoInventarioRepository.findByEan("EAN1")).thenReturn(Optional.of(inventario));
         when(icecatClient.obtenerProducto("EAN1")).thenReturn(respuesta);
-        when(productoMongoRepository.findByEan("EAN1")).thenReturn(Optional.empty());
+        when(productoMongoRepository.findByEan("EAN1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(documento));
         when(icecatMapper.toDocumento(respuesta, "EAN1", null)).thenReturn(documento);
-        when(productoMongoRepository.save(documento)).thenReturn(documento);
+        when(mongoTemplate.getConverter()).thenReturn(mongoConverter);
         when(productoCatalogoMapper.toDetalle(documento, inventario)).thenReturn(detalle);
 
         ProductoCatalogoDetalleResponse resultado = icecatService.sincronizarProducto(" ean1 ");
 
         assertSame(detalle, resultado);
-        verify(productoMongoRepository).save(documento);
+        verify(mongoTemplate).upsert(any(Query.class), any(UpdateDefinition.class), eq(ProductoDocumento.class));
     }
 
     @Test
@@ -93,9 +103,11 @@ class IcecatServiceImplTest {
         when(productoInventarioRepository.findByEan("EAN2")).thenReturn(Optional.of(segundo));
         when(icecatClient.obtenerProducto("EAN1")).thenReturn(respuesta);
         when(icecatClient.obtenerProducto("EAN2")).thenThrow(new RuntimeException("Icecat no responde"));
-        when(productoMongoRepository.findByEan("EAN1")).thenReturn(Optional.empty());
+        when(productoMongoRepository.findByEan("EAN1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(documento));
         when(icecatMapper.toDocumento(respuesta, "EAN1", null)).thenReturn(documento);
-        when(productoMongoRepository.save(documento)).thenReturn(documento);
+        when(mongoTemplate.getConverter()).thenReturn(mongoConverter);
         when(productoCatalogoMapper.toDetalle(documento, inventario)).thenReturn(detalle);
 
         SincronizacionResponse resultado = icecatService.sincronizarInventario();
