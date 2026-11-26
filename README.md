@@ -55,6 +55,11 @@ El control de acceso es **RBAC con JWT stateless** sobre tres roles: `ADMIN`, `T
 - **Baja voluntaria con motivo y notificación**: `DELETE /api/clientes/me` identifica al cliente por el JWT, desactiva cliente, persona y usuario sin borrar datos, y envía un correo o log con el motivo indicado.
 - **Sincronización con Icecat** para descargar y mapear fichas técnicas reales a MongoDB, preservando los comentarios existentes al re-sincronizar.
 - **Reseñas con respuesta oficial** del personal y bandeja de comentarios pendientes, resuelta con un *pipeline* de agregación de MongoDB.
+- **Escrituras atómicas en el catálogo**: los comentarios se añaden con `$push` y se responden con un `$set` posicional, y las fichas se guardan con un `upsert` que no reescribe el array de reseñas. Dos peticiones simultáneas sobre el mismo producto no se pisan.
+- **Tope de reseñas por producto**: 50 por defecto (`app.catalogo.max-comentarios`), para que el documento de MongoDB no crezca hasta su límite de 16 MB.
+- **Errores de MongoDB traducidos**: una clave duplicada (E11000) responde `409`; el resto, `500` con un mensaje genérico.
+- **Protección por defecto de la administración**: cualquier ruta bajo `/api/admin/**` exige `ADMIN` o `TRABAJADOR`, aunque no tenga una regla específica.
+- **Validación con cotas superiores**: reseñas de 2000 caracteres, respuestas de 5000 y cantidades de stock acotadas para evitar desbordamientos.
 - **Recuperación de contraseña por email**: simulación en consola en `dev` y Gmail SMTP en `prod`.
 - **Documentación OpenAPI/Swagger** navegable y **migraciones Flyway** versionadas.
 - **Paginación** en los listados de clientes y pedidos.
@@ -175,7 +180,7 @@ TechNovaLD/
 │   │   │   ├── controller/                     # 13 controladores REST
 │   │   │   ├── document/                       # 5 documentos MongoDB (catálogo)
 │   │   │   ├── dto/
-│   │   │   │   ├── request/                    # 17 DTOs de entrada
+│   │   │   │   ├── request/                    # 18 DTOs de entrada
 │   │   │   │   ├── response/                   # 20 DTOs de salida
 │   │   │   │   └── icecat/                     # 11 DTOs que reflejan la respuesta de Icecat
 │   │   │   ├── entity/                         # 10 entidades JPA (MySQL)
@@ -185,19 +190,20 @@ TechNovaLD/
 │   │   │   ├── mapper/                         # 12 mappers Entity ↔ DTO
 │   │   │   ├── repository/
 │   │   │   │   ├── mysql/                      # 10 repositorios JPA + ProductoMasVendidoProjection
-│   │   │   │   └── mongo/                      # 1 repositorio MongoDB
+│   │   │   │   └── mongo/                      # 1 repositorio MongoDB + ProductoDocumentoUpdates
 │   │   │   ├── security/                       # JwtService, JwtAuthenticationFilter,
 │   │   │   │                                   #  CustomUserDetailsService, CredentialGenerator
-│   │   │   ├── seeder/                         # AdminBootstrapInitializer
+│   │   │   ├── seeder/                         # AdminBootstrapInitializer, DataInitializer
 │   │   │   └── service/                       # 13 interfaces (incluye EstadisticaService)
 │   │   │       └── impl/                       # 14 implementaciones
 │   │   └── resources/
 │   │       ├── application.properties          # Configuración común
 │   │       ├── application-dev.properties      # Perfil dev (local / IDE)
 │   │       ├── application-prod.properties     # Perfil prod (SMTP y logs)
-│   │       └── db/migration/
-│   │           ├── V1__init_schema.sql         # 10 tablas (columnas, PK, unique, FK)
-│   │           └── V2__add_proveedor_cif.sql   # CIF único y nullable en proveedor
+│   │       ├── db/migration/
+│   │       │   ├── V1__init_schema.sql         # 10 tablas (columnas, PK, unique, FK)
+│   │       │   └── V2__add_proveedor_cif.sql   # CIF único y nullable en proveedor
+│   │       └── static/                         # Frontend de demostración (HTML, CSS y JS)
 │   └── test/
 │       └── java/com/technovald/
 │           ├── controller/
@@ -233,9 +239,9 @@ TechNovaLD/
 └── README.md
 ```
 
-El árbol muestra solo el backend y sus recursos de configuración; el fichero `.env` no se versiona.
+El árbol muestra el backend y sus recursos de configuración. `src/main/resources/static` incluye un frontend estático de demostración (tres páginas HTML, CSS y JS) que consume la API; no se documentan sus detalles. El fichero `.env` no se versiona.
 
-**Cómputo de ficheros:** 13 controladores + 13 interfaces de servicio + 14 implementaciones + 12 mappers + 10 entidades + 5 documentos + 3 enums + 48 DTOs + 11 repositorios + 1 proyección + 4 excepciones + 4 clases de seguridad + 1 seeder + 3 clases de configuración + 1 cliente + 1 entrada = **144 ficheros Java**.
+**Cómputo de ficheros:** 13 controladores + 13 interfaces de servicio + 14 implementaciones + 12 mappers + 10 entidades + 5 documentos + 3 enums + 49 DTOs + 11 repositorios + 1 proyección + 1 helper de escritura MongoDB + 5 excepciones + 4 clases de seguridad + 2 seeders + 3 clases de configuración + 1 cliente + 1 entrada = **148 ficheros Java**.
 
 ---
 
@@ -308,7 +314,7 @@ GMAIL_USER=<TU_EMAIL>
 GMAIL_APP_PASSWORD=<TU_APP_PASSWORD>
 ```
 
-`JWT_SECRET` debe ser una cadena **codificada en Base64** de al menos 256 bits (32 bytes antes de codificar), porque JJWT lo exige para firmar con HS256. Puedes generar una con:
+`JWT_SECRET` debe ser una cadena **codificada en Base64** de al menos 256 bits (32 bytes antes de codificar). El algoritmo no se configura con una propiedad: JJWT lo deduce de la longitud de la clave (32 bytes → HS256, 48 → HS384, 64 → HS512), así que con el secreto de ejemplo de 32 bytes firma con HS256 y con uno más largo usará HS384 o HS512. Puedes generar uno con:
 
 ```bash
 openssl rand -base64 32
@@ -461,6 +467,7 @@ No se deben escribir contraseñas directamente en los `.properties`: van en `.en
 | Síntoma | Causa y solución |
 |---|---|
 | `Communications link failure` | MySQL no está corriendo o el puerto/password del `.env` no coinciden. |
+| `Access denied for user ...` | Las credenciales del `.env` son locales y no se versionan. Asegúrate de que `MYSQL_USER` y `MYSQL_PASSWORD` coinciden con las de la instancia de MySQL. |
 | `Found non-empty schema ... but no schema history table` | El esquema lo creó Hibernate antes de Flyway. Bórralo y rearranca (ver paso 3). |
 | `Unable to connect to MongoDB` | MongoDB no está levantado, o `MONGO_URI` apunta a otro sitio. |
 | `WeakKeyException` de JJWT | El `JWT_SECRET` no está en Base64 o tiene menos de 256 bits. |
@@ -707,7 +714,21 @@ El compose publica MySQL en `3307` y MongoDB en `27018` para poder inspeccionarl
 ./mvnw test
 ```
 
-El proyecto incluye **`TechNovaLdApplicationTests`**, un test de carga de contexto con `@SpringBootTest`. Arranca el contexto real, así que necesita MySQL, MongoDB y el `.env` disponibles; no hay un perfil de test separado.
+El proyecto cuenta con **124 pruebas**:
+
+| Grupo | Pruebas | Necesita |
+|---|---:|---|
+| Unitarias y de controlador | 99 | Nada: Mockito, sin infraestructura |
+| Integración con Testcontainers | 10 | Docker |
+| Contexto y rutas (`TechNovaLdApplicationTests`, `SecurityRoutesTest`) | 15 | MySQL y MongoDB reales |
+
+Las 10 de integración levantan MySQL 8 y MongoDB efímeros con Testcontainers y cubren la sobreventa concurrente, la recepción idempotente, el Top 5 y las escrituras concurrentes del catálogo: dos reseñas simultáneas, dos respuestas simultáneas y guardado de la ficha mientras se comenta.
+
+`TechNovaLdApplicationTests` y `SecurityRoutesTest` arrancan el contexto real, así que necesitan MySQL, MongoDB y el `.env` disponibles; no hay un perfil de test separado. Para ejecutar solo la parte que no necesita infraestructura:
+
+```bash
+.\mvnw.cmd test -Dtest="!TechNovaLdApplicationTests,!SecurityRoutesTest,!TechNovaLdIntegrationTest"
+```
 
 `ClienteServiceImplTest` cubre la baja propia, la desactivación de las tres filas, el envío del motivo al correo y la tolerancia a un fallo SMTP sin revertir la baja.
 
@@ -854,7 +875,7 @@ Base: `/api/admin/inventario`
 | `DELETE` | `/api/admin/inventario/{id}` | ADMIN | Path: `id` | `Void` (`204`) | Baja lógica. |
 | `PATCH` | `/api/admin/inventario/{id}/reactivar` | ADMIN | Path: `id` | `Void` (`204`) | Reactiva el producto. |
 
-El ajuste de stock acepta cantidades positivas o negativas; si el stock resultante sería negativo, responde `400`.
+El ajuste de stock acepta cantidades entre `-1.000.000` y `1.000.000`; si el stock resultante sería negativo, responde `400`.
 
 ### CatalogoController
 
@@ -901,7 +922,7 @@ Base: `/api/comentarios`
 | `GET` | `/api/comentarios/pendientes` | ADMIN / TRABAJADOR | — | `List<ComentarioPendienteResponse>` | Bandeja de reseñas sin respuesta oficial. |
 | `PUT` | `/api/comentarios/{comentarioId}/responder` | ADMIN / TRABAJADOR | Path: `comentarioId` (UUID); Body: `RespuestaComentarioRequest` | `ComentarioResponse` | Respuesta oficial. |
 
-`productoInventarioId` es el id de MySQL, no el EAN. El detalle del catálogo incluye las reseñas activas y su respuesta.
+`productoInventarioId` es el id de MySQL, no el EAN. El detalle del catálogo incluye las reseñas activas y su respuesta. El texto de la reseña admite hasta 2000 caracteres y la respuesta oficial hasta 5000. Cada producto admite un máximo de 50 reseñas (`app.catalogo.max-comentarios`); al superarlo, `POST /api/comentarios` responde `400`.
 
 ### SolicitudReposicionController
 
@@ -913,7 +934,7 @@ Base: `/api/solicitudes`
 | `PUT` | `/api/solicitudes/{id}/recibir` | ADMIN / TRABAJADOR | Path: `id` | `SolicitudReposicionResponse` | Pasa a `RECIBIDO` y suma el stock en una transacción. |
 | `GET` | `/api/solicitudes` | ADMIN / TRABAJADOR | Query: `estado` (`EstadoSolicitud`, opcional) | `List<SolicitudReposicionResponse>` | Lista activas; filtro `PENDIENTE` o `RECIBIDO`. |
 
-El usuario autenticado debe tener ficha de empleado; el administrador inicial la tiene. La recepción es atómica: si el stock no se actualiza, la transacción revierte el estado.
+El usuario autenticado debe tener ficha de empleado; el administrador inicial la tiene. La cantidad solicitada debe estar entre 1 y 1.000.000. La recepción es atómica: si el stock no se actualiza, la transacción revierte el estado.
 
 ### EstadisticaController
 
@@ -988,9 +1009,11 @@ Los errores de negocio y validación usan un cuerpo uniforme:
 }
 ```
 
-- `400`: validación, regla de negocio o JSON ilegible.
+- `400`: validación, regla de negocio, JSON ilegible o parámetro de ordenación inexistente (`?sort=inventado`).
 - `401` / `403`: los emite la cadena de filtros; pueden llegar sin cuerpo.
 - `404`: recurso inexistente.
+- `409`: conflicto de unicidad (DNI, email, EAN, CIF o nombre duplicados) o clave duplicada en MongoDB (E11000).
+- `423`: cuenta bloqueada temporalmente; incluye la cabecera `Retry-After` con los segundos restantes.
 - `503`: fallo al consultar Icecat.
 
 ### Documentación interactiva
@@ -1017,6 +1040,12 @@ Los endpoints públicos también muestran el candado porque el requisito de segu
 - **MongoDB**: colección `productos` con `ProductoDocumento`; contiene descripciones, galería, especificaciones y reseñas embebidas.
 - El puente entre ambas bases es el **EAN**: `producto_inventario.ean` ↔ `productos.ean`.
 - No hay transacción distribuida entre MySQL y MongoDB: cada operación se resuelve en su base y el catálogo combina ambas lecturas.
+
+### Escrituras concurrentes y errores de MongoDB
+
+- **Operadores atómicos.** Los comentarios se añaden con `$push` y se responden con un `$set` posicional (`arrayFilters`). El alta manual y la sincronización de Icecat hacen un `upsert` con `$set` campo a campo que excluye `_id` y `comentarios`. Así dos operaciones simultáneas sobre el mismo producto no se pisan y una reseña no se pierde al guardar la ficha.
+- **Tope de reseñas.** Cada producto admite 50 reseñas por defecto (`app.catalogo.max-comentarios`); al alcanzarlo, la API responde `400`.
+- **Errores.** Una clave duplicada de MongoDB (E11000) se traduce a `409`; cualquier otro fallo del driver, a `500` con un mensaje genérico. El detalle queda en el log del servidor.
 
 ### Diagrama de Clases UML
 
@@ -1394,8 +1423,11 @@ flowchart LR
 - ✅ Solicitudes de reposición: creación, recepción atómica con incremento de stock y listado por estado.
 - ✅ Estadísticas: Top 5 de productos más vendidos, con consulta agregada y endpoint `GET /api/stats/productos-mas-vendidos` (solo ADMIN).
 - ✅ Paginación en clientes y pedidos; validación Jakarta; formato de error uniforme; Swagger con Bearer.
+- ✅ Concurrencia del catálogo: escrituras atómicas en MongoDB (`$push`, `$set` posicional), `upsert` que conserva las reseñas y tope de 50 reseñas por producto.
+- ✅ Errores traducidos: conflictos de unicidad de MySQL y claves duplicadas de MongoDB a `409`; `423` con `Retry-After` para cuentas bloqueadas.
+- ✅ Protección por defecto de `/api/admin/**` para cualquier controlador nuevo.
 - ✅ Flyway para MySQL, índices y colección de MongoDB, borrado lógico.
-- ✅ 114 pruebas automatizadas: 92 unitarias, 14 de seguridad, 7 de integración con Testcontainers y 1 de contexto.
+- ✅ 124 pruebas automatizadas: 99 unitarias y de controlador, 10 de integración con Testcontainers y 15 de contexto y rutas.
 - ✅ Datos de demostración: 20 clientes, 5 trabajadores, 6 categorías, 10 proveedores, 18 productos validados con Icecat, 10 reseñas, 5 pedidos y 3 reposiciones; seed `dev` idempotente y opt-in.
 - ✅ Docker/Compose: `Dockerfile` multi-stage, `.dockerignore`, MySQL 8, MongoDB 7, healthchecks, volúmenes, app en `prod` y seed one-shot en `dev`.
 
