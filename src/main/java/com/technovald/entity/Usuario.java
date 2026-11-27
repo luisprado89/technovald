@@ -193,6 +193,20 @@ public class Usuario {
     @Builder.Default
     private Boolean activo = true;
 
+    /** Indica si el correo de la cuenta se ha verificado con un código. */
+    @Column(name = "email_verificado", nullable = false)
+    @Builder.Default
+    private Boolean emailVerificado = false;
+
+    /** Intentos de login fallidos consecutivos. */
+    @Column(name = "intentos_fallidos_login", nullable = false)
+    @Builder.Default
+    private Integer intentosFallidosLogin = 0;
+
+    /** Fin del bloqueo temporal por intentos fallidos; {@code null} si no está bloqueada. */
+    @Column(name = "bloqueado_hasta")
+    private LocalDateTime bloqueadoHasta;
+
     /**
      * Versión de los tokens JWT emitidos para este usuario.
      *
@@ -267,6 +281,18 @@ public class Usuario {
      */
     public void invalidateTokens() {
         this.tokenVersion = (tokenVersion == null ? 0 : tokenVersion) + 1;
+    }
+
+    /** Marca el correo como verificado y activa la cuenta. */
+    public void activar() {
+        this.emailVerificado = true;
+        this.activo = true;
+    }
+
+    /** Limpia el bloqueo temporal y el contador de intentos fallidos. */
+    public void desbloquear() {
+        this.intentosFallidosLogin = 0;
+        this.bloqueadoHasta = null;
     }
 
     /**
