@@ -2,8 +2,12 @@ package com.technovald.repository.mysql;
 
 import com.technovald.entity.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -30,6 +34,51 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
      * </p>
      */
     Optional<Usuario> findByUsernameAndActivoTrue(String username);
+
+    /** Busca un usuario por username, esté activo o no (para activar cuentas pendientes). */
+    Optional<Usuario> findByUsername(String username);
+
+    /** Busca el usuario dueño de un email. */
+    Optional<Usuario> findByPersonaEmail(String email);
+
+    /**
+     * Suma un intento de login fallido de forma atómica.
+     *
+     * @param id id del usuario.
+     * @return filas afectadas.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Usuario u set u.intentosFallidosLogin = u.intentosFallidosLogin + 1 where u.id = :id")
+    int incrementarIntentosFallidos(@Param("id") Long id);
+
+    /**
+     * Bloquea la cuenta si ya alcanzó los cinco intentos fallidos.
+     *
+     * @param id    id del usuario.
+     * @param hasta fin del bloqueo.
+     * @return filas afectadas.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Usuario u
+               set u.bloqueadoHasta = :hasta
+             where u.id = :id and u.intentosFallidosLogin >= 5
+            """)
+    int bloquearUsuario(@Param("id") Long id, @Param("hasta") LocalDateTime hasta);
+
+    /**
+     * Resetea el contador de fallos y limpia el bloqueo.
+     *
+     * @param id id del usuario.
+     * @return filas afectadas.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Usuario u
+               set u.intentosFallidosLogin = 0, u.bloqueadoHasta = null
+             where u.id = :id
+            """)
+    int resetearIntentos(@Param("id") Long id);
 
      /**
      *  Comprueba si ya existe un usuario con el username indicado.
